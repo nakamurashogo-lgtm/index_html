@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Study Tracker</title>
+  
+  <!-- PWA設定 -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="apple-touch-icon" href="./icon.png">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel (ブラウザ内でJSXを変換) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* アニメーションと基本設定 */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideInFromBottom { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideInFromRight { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes zoomIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    
+    .animate-in { animation-duration: 300ms; animation-fill-mode: forwards; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+    .fade-in { animation-name: fadeIn; }
+    .slide-in-from-bottom-4 { animation-name: slideInFromBottom; }
+    .slide-in-from-right-4 { animation-name: slideInFromRight; }
+    .zoom-in { animation-name: zoomIn; }
+    
+    /* スクロールバー非表示（スマホアプリ風） */
+    ::-webkit-scrollbar { display: none; }
+    * { -ms-overflow-style: none; scrollbar-width: none; -webkit-tap-highlight-color: transparent; }
+    
+    body { background-color: #111827; margin: 0; padding: 0; overflow: hidden; overscroll-behavior-y: none; }
+    #root { height: 100vh; height: 100dvh; display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+
+    // --- 定数・初期設定 ---
+    const SUBJECT_COLORS = {
+      '英語': '#ec4899', '数学': '#3b82f6', '理科': '#22c55e', 
+      '社会': '#f97316', '国語': '#a855f7', 'その他': '#9ca3af',
+    };
+    const SUBJECTS = Object.keys(SUBJECT_COLORS);
+
+    const INITIAL_MATERIALS = [
+      { id: 'm1', name: 'システム英単語', subject: '英語' },
+      { id: 'm2', name: '青チャート', subject: '数学' },
+      { id: 'm3', name: '現代文キーワード読解', subject: '国語' },
+      { id: 'm4', name: '物理のエッセンス', subject: '理科' },
+      { id: 'm5', name: '日本史B 一問一答', subject: '社会' },
+    ];
+
+    const DEFAULT_WEEKLY_GOAL_HOURS = 20;
+
+    const EVENT_COLORS = [
+      { id: 'red', label: 'テスト', color: '#ef4444' },
+      { id: 'blue', label: '模試', color: '#3b82f6' },
+      { id: 'yellow', label: '提出・課題', color: '#eab308' },
+      { id: 'green', label: 'その他', color: '#10b981' },
+    ];
+
+    // --- ヘルパー関数 ---
+    const formatTime = (totalSeconds) => {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      return h > 0 
+        ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        : `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const formatTimeShort = (totalSeconds) => {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      if (h > 0 && m > 0) return `${h}h ${m}m`;
+      if (h > 0) return `${h}h`;
+      return `${m}m`;
+    };
+
+    const getLocalDateString = (date) => {
+      const d = new Date(date);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().split('T')[0];
+    };
+
+    // Lucide Icons のためのヘルパーコンポーネント
+    const Icon = ({ name, size = 24, className = '', ...props }) => {
+      useEffect(() => { lucide.createIcons(); });
+      return <i data-lucide={name} style={{ width: size, height: size }} className={className} {...props}></i>;
+    };
+
+    const generateMockData = (materials) => {
+      const data = [];
+      const today = new Date();
+      for (let i = 35; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = getLocalDateString(date);
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        const numSessions = isWeekend ? Math.floor(Math.random() * 4) + 1 : Math.floor(Math.random() * 3);
+        
+        for (let j = 0; j < numSessions; j++) {
+          const material = materials[Math.floor(Math.random() * materials.length)];
+          data.push({
+            id: `mock-${i}-${j}`,
+            date: dateStr,
+            materialId: material.id,
+            duration: Math.floor(Math.random() * 5400) + 1800,
+            timestamp: date.getTime() + j * 10000,
+          });
+        }
+      }
+      return data;
+    };
+
+    // --- カスタムチャートコンポーネント (Rechartsの代替) ---
+    const CustomBarChart = ({ data, subjects, colors, view }) => {
+      const maxHours = Math.max(...data.map(d => (d.totalSeconds / 3600)), 1);
+      const yTicks = [maxHours, maxHours * 0.75, maxHours * 0.5, maxHours * 0.25, 0];
+
+      return (
+        <div className="flex flex-col h-full w-full">
+          {/* 凡例 (Legend) */}
+          <div className="flex flex-wrap gap-2 justify-center mb-3 px-2 shrink-0">
+            {subjects.map(sub => (
+              <div key={sub} className="flex items-center text-[10px] text-gray-600 font-medium">
+                <span className="w-2 h-2 rounded-full mr-1" style={{backgroundColor: colors[sub]}}></span>
+                {sub}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-1 w-full relative pb-5 px-1">
+            {/* Y軸 */}
+            <div className="flex flex-col justify-between h-full text-[10px] text-gray-400 pr-1 absolute left-0 top-0 bottom-5 w-8 items-end">
+              {yTicks.map((tick, i) => (
+                <span key={i} className="leading-none">{Math.round(tick * 10) / 10}</span>
+              ))}
+            </div>
+            
+            {/* グラフエリア */}
+            <div className="flex-1 flex items-end justify-between h-full ml-8 relative border-b border-gray-200">
+              {/* グリッド線 */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                {yTicks.map((_, i) => (
+                  <div key={i} className="w-full border-t border-gray-100 border-dashed h-0"></div>
+                ))}
+              </div>
+
+              {/* 棒グラフ本体 */}
+              {data.map((d, i) => {
+                const totalH = d.totalSeconds / 3600;
+                const heightPct = (totalH / maxHours) * 100;
+                // 30日表示の場合はラベルを間引く
+                const showLabel = view !== '30days' || i % 4 === 0;
+
+                return (
+                  <div key={i} className="flex flex-col items-center justify-end w-full group relative h-full">
+                    {/* ツールチップ (ホバー時に表示) */}
+                    <div className="absolute bottom-full mb-2 hidden group-hover:block z-50 bg-gray-800 text-white text-xs p-2 rounded-lg shadow-xl whitespace-nowrap min-w-[120px] left-1/2 -translate-x-1/2">
+                      <div className="font-bold mb-1 border-b border-gray-600 pb-1 text-center">{d.name}</div>
+                      <div className="mb-2 font-mono text-center text-orange-300 font-bold">計: {formatTimeShort(d.totalSeconds)}</div>
+                      <div className="space-y-1">
+                        {subjects.map(sub => {
+                          if (d[sub] > 0) {
+                            const mins = Math.round(d[sub] * 60);
+                            const h = Math.floor(mins / 60);
+                            const m = mins % 60;
+                            const timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                            return (
+                              <div key={sub} className="flex items-center justify-between gap-4 text-[10px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full" style={{backgroundColor: colors[sub]}}></span>
+                                  <span>{sub}</span>
+                                </div>
+                                <span className="font-mono">{timeStr}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                      {/* 下向きの三角形 */}
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+
+                    {/* 積み上げ棒グラフ */}
+                    <div 
+                      className="w-[85%] flex flex-col-reverse max-w-[24px] mx-auto rounded-t-sm overflow-hidden z-10 transition-opacity hover:opacity-75 cursor-pointer" 
+                      style={{ height: `${heightPct}%` }}
+                    >
+                      {subjects.map(sub => {
+                        if (d[sub] > 0) {
+                          const subPct = (d[sub] / totalH) * 100;
+                          return <div key={sub} style={{ height: `${subPct}%`, backgroundColor: colors[sub] }} className="w-full"></div>
+                        }
+                        return null;
+                      })}
+                    </div>
+                    
+                    {/* X軸ラベル */}
+                    <div className="absolute -bottom-5 text-[9px] text-gray-500 text-center w-full truncate">
+                      {showLabel ? (d.dayOnly || d.name) : ''}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- メインコンポーネント ---
+    function App() {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [materials, setMaterials] = useState(INITIAL_MATERIALS);
+      const [records, setRecords] = useState(() => generateMockData(INITIAL_MATERIALS));
+      const [weeklyGoalHours, setWeeklyGoalHours] = useState(DEFAULT_WEEKLY_GOAL_HOURS);
+
+      const [events, setEvents] = useState([
+        { id: 'ev1', date: getLocalDateString(new Date()), title: '英語 小テスト', color: '#ef4444' }
+      ]);
+
+      const [isRunning, setIsRunning] = useState(false);
+      const [seconds, setSeconds] = useState(0);
+      const [selectedMaterialId, setSelectedMaterialId] = useState(materials[0]?.id || '');
+
+      const [calendarDate, setCalendarDate] = useState(new Date());
+      const [selectedDay, setSelectedDay] = useState(null);
+
+      // --- タイマーロジック ---
+      useEffect(() => {
+        let interval = null;
+        if (isRunning) {
+          interval = setInterval(() => setSeconds(s => s + 1), 1000);
+        } else if (!isRunning && seconds !== 0) {
+          clearInterval(interval);
+        }
+        return () => clearInterval(interval);
+      }, [isRunning, seconds]);
+
+      const handleStartPause = useCallback(() => setIsRunning(prev => !prev), []);
+      const handleReset = useCallback(() => { setSeconds(0); setIsRunning(false); }, []);
+
+      const handleStopAndSave = useCallback(() => {
+        if (seconds === 0 || !selectedMaterialId) return;
+        const todayStr = getLocalDateString(new Date());
+        const newRecord = {
+          id: Date.now().toString(), date: todayStr, materialId: selectedMaterialId,
+          duration: seconds, timestamp: Date.now(),
+        };
+        setRecords(prev => [...prev, newRecord]);
+        setSeconds(0);
+        setIsRunning(false);
+        setActiveTab('dashboard');
+      }, [seconds, selectedMaterialId]);
+
+      useEffect(() => {
+        if (!materials.find(m => m.id === selectedMaterialId) && materials.length > 0) {
+          setSelectedMaterialId(materials[0].id);
+        }
+      }, [materials, selectedMaterialId]);
+
+      // --- データ集計 ---
+      const recordsByDate = useMemo(() => {
+        const map = {};
+        records.forEach(r => {
+          if (!map[r.date]) map[r.date] = [];
+          map[r.date].push(r);
+        });
+        return map;
+      }, [records]);
+
+      const generateChartData = useCallback((daysAgoStart, daysCount, intervalType = 'day') => {
+        const data = [];
+        const baseDate = new Date();
+        baseDate.setHours(0, 0, 0, 0);
+
+        if (intervalType === 'day') {
+          for (let i = daysCount - 1; i >= 0; i--) {
+            const d = new Date(baseDate);
+            d.setDate(d.getDate() - (daysAgoStart + i));
+            const dateStr = getLocalDateString(d);
+            const dayRecords = recordsByDate[dateStr] || [];
+            
+            const entry = { name: `${d.getMonth() + 1}/${d.getDate()}`, date: dateStr, dayOnly: `${d.getDate()}`, totalSeconds: 0 };
+            SUBJECTS.forEach(sub => entry[sub] = 0);
+
+            dayRecords.forEach(r => {
+              const material = materials.find(m => m.id === r.materialId);
+              const subject = material ? material.subject : 'その他';
+              entry[subject] += r.duration / 3600;
+              entry.totalSeconds += r.duration;
+            });
+            SUBJECTS.forEach(sub => entry[sub] = Number(entry[sub].toFixed(2)));
+            data.push(entry);
+          }
+        } else if (intervalType === 'week') {
+          const labels = ['今週', '先週', '2週前', '3週前'];
+          for (let w = daysCount - 1; w >= 0; w--) {
+            const entry = { name: labels[w], dayOnly: labels[w], totalSeconds: 0 };
+            SUBJECTS.forEach(sub => entry[sub] = 0);
+
+            for (let d = 6; d >= 0; d--) {
+              const targetD = new Date(baseDate);
+              targetD.setDate(targetD.getDate() - (w * 7 + d));
+              const dateStr = getLocalDateString(targetD);
+              const dayRecords = recordsByDate[dateStr] || [];
+              
+              dayRecords.forEach(r => {
+                const material = materials.find(m => m.id === r.materialId);
+                const subject = material ? material.subject : 'その他';
+                entry[subject] += r.duration / 3600;
+                entry.totalSeconds += r.duration;
+              });
+            }
+            SUBJECTS.forEach(sub => entry[sub] = Number(entry[sub].toFixed(2)));
+            data.push(entry);
+          }
+        }
+        return data;
+      }, [recordsByDate, materials]);
+
+      const dailyData7 = useMemo(() => generateChartData(0, 7, 'day'), [generateChartData]);
+      const dailyData30 = useMemo(() => generateChartData(0, 30, 'day'), [generateChartData]);
+      const weeklyData = useMemo(() => generateChartData(0, 4, 'week'), [generateChartData]);
+
+      const currentWeekTotalSeconds = useMemo(() => {
+        return weeklyData[weeklyData.length - 1]?.totalSeconds || 0;
+      }, [weeklyData]);
+
+      // --- 画面コンポーネント ---
+
+      // 1. タイマー画面
+      const TimerScreen = () => (
+        <div className="flex flex-col items-center justify-center h-full p-6 space-y-8 animate-in fade-in zoom-in">
+          <div className="w-full max-w-xs">
+            <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+              <Icon name="book-open" size={16} className="mr-1" /> 使用教材
+            </label>
+            {materials.length === 0 ? (
+              <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm text-center font-bold">設定から教材を登録してください</div>
+            ) : (
+              <select 
+                value={selectedMaterialId} onChange={(e) => setSelectedMaterialId(e.target.value)} disabled={isRunning}
+                className="w-full p-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all disabled:opacity-50 font-medium text-gray-800 bg-white"
+              >
+                {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.subject})</option>)}
+              </select>
+            )}
+          </div>
+
+          <div className="relative flex items-center justify-center w-64 h-64 bg-white rounded-full shadow-[0_0_40px_rgba(0,0,0,0.05)] border-4 border-blue-50">
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle 
+                cx="50" cy="50" r="48" fill="none" stroke={isRunning ? "#3b82f6" : "#e5e7eb"} 
+                strokeWidth="4" strokeDasharray="301.59" strokeDashoffset={isRunning ? (seconds % 60) / 60 * -301.59 : 0}
+                className="transition-all duration-1000 ease-linear"
+              />
+            </svg>
+            <div className="text-center z-10">
+              <div className="text-5xl font-mono font-bold text-gray-800 tracking-tighter">{formatTime(seconds)}</div>
+              <div className="text-sm text-gray-500 mt-2 font-medium">
+                {isRunning ? <span className="animate-pulse text-blue-600">計測中...</span> : '準備OK'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex space-x-6">
+            <button onClick={handleStartPause} disabled={materials.length === 0}
+              className={`flex items-center justify-center w-16 h-16 rounded-full shadow-lg transition-transform active:scale-95 disabled:opacity-40 ${isRunning ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`}>
+              <Icon name={isRunning ? 'pause' : 'play'} size={28} className={!isRunning ? "ml-1" : ""} />
+            </button>
+            <button onClick={handleStopAndSave} disabled={seconds === 0}
+              className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500 text-white shadow-lg transition-transform active:scale-95 disabled:opacity-40">
+              <Icon name="square" size={24} />
+            </button>
+            <button onClick={handleReset} disabled={seconds === 0 || isRunning}
+              className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-200 text-gray-600 shadow-md transition-transform active:scale-95 disabled:opacity-40">
+              <span className="text-xs font-bold">リセット</span>
+            </button>
+          </div>
+        </div>
+      );
+
+      // 2. ダッシュボード画面
+      const DashboardScreen = () => {
+        const [view, setView] = useState('7days');
+        const goalSeconds = weeklyGoalHours * 3600;
+        const progressPercent = Math.min(100, Math.round((currentWeekTotalSeconds / goalSeconds) * 100));
+
+        return (
+          <div className="flex flex-col h-full p-4 overflow-y-auto pb-24 animate-in fade-in slide-in-from-bottom-4">
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+              <div className="flex justify-between items-end mb-2">
+                <div className="flex items-center text-sm font-bold text-gray-700"><Icon name="target" size={16} className="text-blue-500 mr-1" /> 今週の目標達成度</div>
+                <div className="text-xs text-gray-500"><span className="font-bold text-gray-800 text-sm">{formatTimeShort(currentWeekTotalSeconds)}</span> / {weeklyGoalHours}h</div>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-3 mb-1 overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+              </div>
+              <p className="text-[10px] text-right text-gray-400 font-bold">{progressPercent}% 達成</p>
+            </div>
+
+            <div className="flex bg-gray-200/80 p-1 rounded-xl mb-4">
+              {[{ id: '7days', label: '7日間' }, { id: '30days', label: '30日間' }, { id: 'weekly', label: '週間比較' }].map(tab => (
+                <button key={tab.id} onClick={() => setView(tab.id)}
+                  className={`flex-1 text-xs font-bold py-2 rounded-lg transition-all ${view === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* カスタムグラフの表示部分 */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 h-72">
+               <CustomBarChart 
+                 data={view === '7days' ? dailyData7 : view === '30days' ? dailyData30 : weeklyData} 
+                 subjects={SUBJECTS} 
+                 colors={SUBJECT_COLORS}
+                 view={view}
+               />
+            </div>
+
+            <h3 className="text-sm font-bold text-gray-700 mb-3 ml-1">最近の学習記録</h3>
+            <div className="space-y-3">
+              {records.slice().reverse().slice(0, 10).map((record) => {
+                const material = materials.find(m => m.id === record.materialId);
+                const subject = material ? material.subject : '不明';
+                const color = SUBJECT_COLORS[subject] || SUBJECT_COLORS['その他'];
+                return (
+                  <div key={record.id} className="bg-white p-3 rounded-xl shadow-sm border border-gray-50 flex items-center justify-between">
+                    <div className="flex items-center overflow-hidden">
+                      <div className="w-3 h-10 rounded-full mr-3 shrink-0" style={{ backgroundColor: color }}></div>
+                      <div className="truncate pr-2">
+                        <p className="font-bold text-gray-800 text-sm truncate">{material ? material.name : '削除された教材'}</p>
+                        <p className="text-[10px] text-gray-500 font-medium">{subject} • {record.date.replace(/-/g, '/')}</p>
+                      </div>
+                    </div>
+                    <div className="font-mono font-bold text-gray-700 shrink-0">{formatTimeShort(record.duration)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      };
+
+      // 3. カレンダー画面
+      const CalendarScreen = () => {
+        const year = calendarDate.getFullYear();
+        const month = calendarDate.getMonth();
+        
+        const [newEventTitle, setNewEventTitle] = useState('');
+        const [newEventColor, setNewEventColor] = useState(EVENT_COLORS[0].color);
+        
+        const prevMonth = () => setCalendarDate(new Date(year, month - 1, 1));
+        const nextMonth = () => setCalendarDate(new Date(year, month + 1, 1));
+
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const todayStr = getLocalDateString(new Date());
+
+        const days = [];
+        for (let i = 0; i < firstDayIndex; i++) days.push(null);
+        for (let i = 1; i <= daysInMonth; i++) days.push(getLocalDateString(new Date(year, month, i)));
+
+        const selectedDayEvents = selectedDay ? events.filter(ev => ev.date === selectedDay) : [];
+
+        const handleAddEvent = (e) => {
+          e.preventDefault();
+          if (!newEventTitle.trim() || !selectedDay) return;
+          setEvents([...events, { id: `ev-${Date.now()}`, date: selectedDay, title: newEventTitle, color: newEventColor }]);
+          setNewEventTitle('');
+        };
+
+        const handleDeleteEvent = (id) => setEvents(events.filter(ev => ev.id !== id));
+
+        return (
+          <div className="flex flex-col h-full bg-white relative animate-in fade-in slide-in-from-right-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <button onClick={prevMonth} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><Icon name="chevron-left" size={20}/></button>
+              <h2 className="text-lg font-bold text-gray-800">{year}年 {month + 1}月</h2>
+              <button onClick={nextMonth} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full"><Icon name="chevron-right" size={20}/></button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto pb-24">
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['日','月','火','水','木','金','土'].map((d, i) => (
+                  <div key={d} className={`text-center text-xs font-bold ${i===0?'text-red-500':i===6?'text-blue-500':'text-gray-500'}`}>{d}</div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-1">
+                {days.map((dateStr, index) => {
+                  if (!dateStr) return <div key={`empty-${index}`} className="h-16"></div>;
+                  const dayNum = parseInt(dateStr.split('-')[2], 10);
+                  const isToday = dateStr === todayStr;
+                  const isSelected = dateStr === selectedDay;
+                  const dayEvents = events.filter(ev => ev.date === dateStr);
+
+                  return (
+                    <div key={dateStr} onClick={() => setSelectedDay(dateStr)}
+                      className={`h-16 border rounded-lg p-1 flex flex-col items-center cursor-pointer transition-colors overflow-hidden ${isSelected ? 'bg-orange-50 border-orange-400' : isToday ? 'border-orange-200 bg-orange-50/30' : 'border-gray-100 hover:bg-gray-50'}`}>
+                      <span className={`text-[11px] font-bold ${isToday ? 'bg-orange-500 text-white w-5 h-5 rounded-full flex items-center justify-center' : 'text-gray-700'}`}>{dayNum}</span>
+                      <div className="flex flex-col gap-[2px] mt-1 w-full px-[2px]">
+                        {dayEvents.slice(0, 2).map(ev => (
+                          <div key={ev.id} className="text-[9px] text-white px-1 rounded truncate w-full font-bold shadow-sm" style={{ backgroundColor: ev.color }}>{ev.title}</div>
+                        ))}
+                        {dayEvents.length > 2 && <div className="text-[8px] text-gray-400 text-center font-bold">+{dayEvents.length - 2}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedDay && (
+                <div className="mt-6 bg-orange-50/50 rounded-xl p-4 border border-orange-100 animate-in slide-in-from-bottom-2">
+                  <h3 className="font-bold text-gray-800 mb-3 border-b border-orange-200 pb-2 flex items-center">
+                    <Icon name="calendar-days" size={16} className="mr-2 text-orange-500" />{selectedDay.replace(/-/g, '/')} の予定
+                  </h3>
+                  <div className="space-y-2 mb-4 max-h-32 overflow-y-auto pr-1">
+                    {selectedDayEvents.length === 0 ? <p className="text-xs text-gray-500 text-center py-2">予定はありません</p> : (
+                      selectedDayEvents.map(ev => (
+                        <div key={ev.id} className="flex justify-between items-center text-sm bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                          <div className="flex items-center truncate pr-2">
+                            <span className="w-3 h-3 rounded-full mr-2 shrink-0 shadow-sm" style={{ backgroundColor: ev.color }}></span>
+                            <span className="font-bold text-gray-700 truncate">{ev.title}</span>
+                          </div>
+                          <button onClick={() => handleDeleteEvent(ev.id)} className="text-gray-300 hover:text-red-500 p-1"><Icon name="trash-2" size={14} /></button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <form onSubmit={handleAddEvent} className="bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
+                    <p className="text-xs font-bold text-gray-500 mb-2">予定を追加する</p>
+                    <input type="text" placeholder="模試、定期テストなど" value={newEventTitle} onChange={(e) => setNewEventTitle(e.target.value)}
+                      className="w-full p-2 border rounded-md text-sm outline-none focus:ring-2 focus:ring-orange-400 mb-2" />
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-2">
+                        {EVENT_COLORS.map(c => (
+                          <button key={c.id} type="button" onClick={() => setNewEventColor(c.color)}
+                            className={`w-6 h-6 rounded-full border-2 transition-all ${newEventColor === c.color ? 'scale-110 shadow-md border-gray-400' : 'border-transparent'}`} style={{ backgroundColor: c.color }} title={c.label} />
+                        ))}
+                      </div>
+                      <button type="submit" disabled={!newEventTitle.trim()} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-1.5 px-3 rounded-md disabled:opacity-50">追加</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      // 4. 設定・提出画面
+      const SettingsScreen = () => {
+        const [newMaterialName, setNewMaterialName] = useState('');
+        const [newMaterialSubject, setNewMaterialSubject] = useState(SUBJECTS[0]);
+        const [isCopied, setIsCopied] = useState(false);
+
+        const handleAddMaterial = (e) => {
+          e.preventDefault();
+          if (!newMaterialName.trim()) return;
+          setMaterials([...materials, { id: `m${Date.now()}`, name: newMaterialName.trim(), subject: newMaterialSubject }]);
+          setNewMaterialName('');
+        };
+
+        const handleDeleteMaterial = (id) => {
+          if(window.confirm('この教材を削除しますか？\n（過去の記録は「削除された教材」として残ります）')) {
+            setMaterials(materials.filter(m => m.id !== id));
+          }
+        };
+
+        const generateReport = () => {
+          let report = `【学習記録レポート】\n作成日: ${new Date().toLocaleDateString('ja-JP')}\n\n`;
+          report += `■ 今週の目標: ${weeklyGoalHours}時間\n`;
+          const progress = Math.min(100, Math.round((currentWeekTotalSeconds / (weeklyGoalHours * 3600)) * 100));
+          report += `今週の達成率: ${progress}%\n\n`;
+
+          const total7d = dailyData7.reduce((acc, curr) => acc + curr.totalSeconds, 0);
+          report += `■ 直近7日間 (${dailyData7[0].name} 〜 ${dailyData7[6].name})\n`;
+          report += `合計: ${Math.floor(total7d / 3600)}時間 ${Math.floor((total7d % 3600) / 60)}分\n`;
+          
+          const subjectTotals = {};
+          dailyData7.forEach(day => { SUBJECTS.forEach(sub => { if (!subjectTotals[sub]) subjectTotals[sub] = 0; subjectTotals[sub] += day[sub]; }); });
+          report += `[科目別]\n`;
+          SUBJECTS.forEach(sub => {
+            if (subjectTotals[sub] > 0) {
+              const m = Math.round(subjectTotals[sub] * 60);
+              report += `・${sub}: ${Math.floor(m / 60)}h ${m % 60}m\n`;
+            }
+          });
+          return report;
+        };
+
+        const handleCopy = () => {
+          const textToCopy = generateReport();
+          const textArea = document.createElement("textarea");
+          textArea.value = textToCopy;
+          textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "-9999px";
+          document.body.appendChild(textArea);
+          textArea.focus(); textArea.select();
+          try {
+            document.execCommand('copy');
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+          } catch (err) { console.error('テキストのコピーに失敗しました: ', err); } 
+          finally { document.body.removeChild(textArea); }
+        };
+
+        return (
+          <div className="flex flex-col h-full p-6 overflow-y-auto pb-24 bg-gray-50 animate-in fade-in slide-in-from-right-4">
+            <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center"><Icon name="settings" className="mr-2 text-gray-600" /> 設定と提出</h2>
+
+            <section className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center"><Icon name="target" size={16} className="mr-1 text-blue-500" /> 週間目標の設定</h3>
+              <div className="flex items-center">
+                <input type="number" min="1" max="100" value={weeklyGoalHours} onChange={(e) => setWeeklyGoalHours(Number(e.target.value) || 0)}
+                  className="w-20 p-2 border rounded-lg text-center font-bold text-lg mr-2 outline-none focus:ring-2 focus:ring-blue-500" />
+                <span className="text-gray-600 font-bold">時間 / 週</span>
+              </div>
+            </section>
+
+            <section className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center"><Icon name="book-open" size={16} className="mr-1 text-green-500" /> 教材の登録・管理</h3>
+              <form onSubmit={handleAddMaterial} className="flex flex-col gap-2 mb-4">
+                <input type="text" placeholder="新しい教材名" value={newMaterialName} onChange={(e) => setNewMaterialName(e.target.value)}
+                  className="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500" />
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-gray-50 border rounded-lg pr-2 flex-1">
+                    <span className="text-xs text-gray-500 font-bold px-3 whitespace-nowrap">カテゴリー (科目):</span>
+                    <select value={newMaterialSubject} onChange={(e) => setNewMaterialSubject(e.target.value)}
+                      className="w-full py-2 bg-transparent text-sm outline-none focus:ring-0 font-medium text-gray-700">
+                      {SUBJECTS.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                    </select>
+                  </div>
+                  <button type="submit" disabled={!newMaterialName.trim()} className="bg-green-500 hover:bg-green-600 text-white rounded-lg px-4 py-2 flex items-center justify-center disabled:opacity-50"><Icon name="plus" size={20} /></button>
+                </div>
+              </form>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {materials.map(m => (
+                  <div key={m.id} className="flex justify-between items-center p-2 bg-gray-50 border border-gray-100 rounded-lg">
+                    <div className="flex items-center overflow-hidden">
+                      <span className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: SUBJECT_COLORS[m.subject] }}></span>
+                      <div className="truncate"><p className="text-sm font-bold text-gray-700 truncate">{m.name}</p><p className="text-[10px] text-gray-500">{m.subject}</p></div>
+                    </div>
+                    <button onClick={() => handleDeleteMaterial(m.id)} className="text-gray-400 hover:text-red-500 p-1 shrink-0"><Icon name="trash-2" size={16} /></button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="bg-gradient-to-br from-indigo-50 to-blue-50 p-5 rounded-2xl border border-blue-100">
+              <h3 className="text-sm font-bold text-indigo-900 mb-3 flex items-center"><Icon name="send" size={16} className="mr-1 text-indigo-500" /> 先生に提出</h3>
+              <p className="text-xs text-indigo-700 mb-3">今週の学習状況のサマリーをクリップボードにコピーします。</p>
+              <button onClick={handleCopy}
+                className={`w-full py-3 rounded-xl font-bold flex items-center justify-center transition-all ${isCopied ? 'bg-emerald-500 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md'}`}>
+                {isCopied ? <><Icon name="check-circle-2" className="mr-2" size={18} /> コピー完了！</> : <><Icon name="copy" className="mr-2" size={18} /> レポートをコピー</>}
+              </button>
+            </section>
+          </div>
+        );
+      };
+
+      return (
+        <div className="w-full max-w-md bg-white h-full flex flex-col relative shadow-2xl overflow-hidden">
+          <header className="bg-white px-6 py-4 border-b border-gray-100 z-10 flex justify-between items-center shrink-0">
+            <div className="flex items-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-md">
+                <Icon name="book-open" size={18} className="text-white" />
+              </div>
+              <h1 className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-600 tracking-tight">Study Tracker</h1>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-hidden relative bg-gray-50/50">
+            {activeTab === 'timer' && <TimerScreen />}
+            {activeTab === 'dashboard' && <DashboardScreen />}
+            {activeTab === 'calendar' && <CalendarScreen />}
+            {activeTab === 'settings' && <SettingsScreen />}
+          </main>
+
+          <nav className="bg-white border-t border-gray-200 z-10 px-2 py-2 pb-safe shrink-0">
+            <div className="flex justify-around items-center max-w-sm mx-auto">
+              {[
+                { id: 'timer', icon: 'clock', label: 'タイマー' },
+                { id: 'dashboard', icon: 'bar-chart-3', label: '記録' },
+                { id: 'calendar', icon: 'calendar-days', label: 'カレンダー' },
+                { id: 'settings', icon: 'settings', label: '設定・提出' }
+              ].map(tab => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                    className={`flex flex-col items-center p-2 w-16 transition-all duration-200 ${isActive ? 'text-blue-600 transform scale-105' : 'text-gray-400 hover:text-gray-600'}`}>
+                    <Icon name={tab.icon} size={24} className={isActive ? 'text-blue-600' : ''} />
+                    <span className={`text-[10px] mt-1 ${isActive ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
