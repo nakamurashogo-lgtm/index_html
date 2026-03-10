@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Study Tracker - 学習記録アプリ</title>
   
-  <!-- ライブラリの読み込み -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -13,206 +12,217 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    /* カスタムスクロールバー等 */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; background-color: #f8fafc; }
+    .glass-effect { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
+<body class="text-slate-800">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // --- 設定データ ---
+    // --- 定数設定 ---
     const SUBJECT_COLORS = {
-      '英語': '#ec4899', // Pink
-      '数学': '#3b82f6', // Blue
-      '理科': '#22c55e', // Green
-      '社会': '#f97316', // Orange
-      '国語': '#a855f7', // Purple
-      'その他': '#9ca3af' // Gray
+      '英語': '#ec4899', '数学': '#3b82f6', '理科': '#22c55e', 
+      '社会': '#f97316', '国語': '#a855f7', 'その他': '#9ca3af',
     };
     const SUBJECTS = Object.keys(SUBJECT_COLORS);
-
-    // 古いデータを読み込まないよう、保存キーを新しくしています ("_v2" を付与)
-    const STORAGE_KEYS = {
-      MATERIALS: 'study_materials_v2',
-      RECORDS: 'study_records_v2'
+    
+    // 完全に新しいデータとして認識させるための新しいキー
+    const STORAGE_PREFIX = 'study_tracker_v3_';
+    
+    const getLocalDateString = (date) => {
+      const d = new Date(date);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().split('T')[0];
     };
 
     // --- アイコンコンポーネント ---
-    const Icon = ({ name, size = 24, className = '' }) => {
-      const iconRef = useRef(null);
+    const Icon = ({ name, size = 24, className = '', ...props }) => {
+      // 以前の正常に動いていたシンプルなアイコン生成方法に戻しました
       useEffect(() => {
-        if (iconRef.current) {
-          lucide.createIcons({
-            root: iconRef.current.parentElement,
-            icons: { [name]: lucide.icons[name] }
-          });
-        }
-      }, [name]);
-      return <i ref={iconRef} data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        lucide.createIcons();
+      });
+      return <i data-lucide={name} style={{ width: size, height: size }} className={className} {...props}></i>;
     };
 
-    // --- メインアプリケーション ---
+    // --- メインアプリ ---
     function App() {
       const [activeTab, setActiveTab] = useState('dashboard');
       
-      // データステート (初期値は完全に空の配列)
-      const [materials, setMaterials] = useState(() => {
-        const saved = localStorage.getItem(STORAGE_KEYS.MATERIALS);
-        return saved ? JSON.parse(saved) : [];
-      });
-      const [records, setRecords] = useState(() => {
-        const saved = localStorage.getItem(STORAGE_KEYS.RECORDS);
-        return saved ? JSON.parse(saved) : [];
-      });
+      // データステート (初期値は空。新しいキーで保存されます)
+      const [materials, setMaterials] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'materials')) || []);
+      const [records, setRecords] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'records')) || []);
+      const [events, setEvents] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'events')) || []);
+      const [weeklyGoalHours, setWeeklyGoalHours] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'goal')) || 20);
 
-      // データの保存
-      useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
-      }, [materials]);
+      // 保存処理
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'materials', JSON.stringify(materials)); }, [materials]);
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'records', JSON.stringify(records)); }, [records]);
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'events', JSON.stringify(events)); }, [events]);
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'goal', JSON.stringify(weeklyGoalHours)); }, [weeklyGoalHours]);
 
-      useEffect(() => {
-        localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
-      }, [records]);
-
-      // レコード追加関数
+      // レコード追加
       const addRecord = (materialId, durationSeconds) => {
-        const newRecord = {
-          id: Date.now().toString(),
-          materialId,
-          durationSeconds,
-          date: new Date().toISOString()
-        };
+        const newRecord = { id: Date.now().toString(), materialId, durationSeconds, date: new Date().toISOString() };
         setRecords([newRecord, ...records]);
       };
 
+      const renderContent = () => {
+        switch (activeTab) {
+          case 'dashboard': return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} />;
+          case 'timer': return <Timer materials={materials} addRecord={addRecord} />;
+          case 'calendar': return <Calendar records={records} materials={materials} events={events} setEvents={setEvents} />;
+          case 'materials': return <MaterialsManager materials={materials} setMaterials={setMaterials} />;
+          case 'settings': return <Settings records={records} setRecords={setRecords} materials={materials} setMaterials={setMaterials} events={events} setEvents={setEvents} goal={weeklyGoalHours} setGoal={setWeeklyGoalHours} />;
+          default: return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} />;
+        }
+      };
+
       return (
-        <div className="flex flex-col md:flex-row min-h-screen">
-          {/* サイドバー / ボトムナビゲーション */}
-          <nav className="bg-white border-r md:w-64 flex-shrink-0 flex md:flex-col justify-around md:justify-start p-4 border-b md:border-b-0 sticky top-0 md:h-screen z-10 shadow-sm md:shadow-none">
-            <div className="hidden md:flex items-center gap-2 mb-8 px-2 text-indigo-600">
-              <Icon name="book-open" size={28} />
-              <h1 className="text-xl font-bold tracking-tight">Study Tracker</h1>
+        <div className="flex flex-col md:flex-row h-screen overflow-hidden">
+          {/* サイドバーナビゲーション */}
+          <nav className="glass-effect border-r md:w-64 flex-shrink-0 flex md:flex-col justify-between md:justify-start p-2 md:p-4 z-20 shadow-sm md:shadow-none order-last md:order-first border-t md:border-t-0">
+            <div className="hidden md:flex items-center gap-3 mb-8 px-4 mt-4">
+              <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-md">
+                <Icon name="book-open" size={24} />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-800">Study Tracker</h1>
             </div>
 
-            {[
-              { id: 'dashboard', icon: 'layout-dashboard', label: 'ダッシュボード' },
-              { id: 'timer', icon: 'timer', label: 'タイマー' },
-              { id: 'materials', icon: 'library', label: '教材管理' },
-              { id: 'records', icon: 'history', label: '学習履歴' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3 rounded-xl transition-colors ${
-                  activeTab === tab.id 
-                    ? 'bg-indigo-50 text-indigo-600 font-semibold' 
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <Icon name={tab.icon} size={20} />
-                <span className="text-xs md:text-sm">{tab.label}</span>
-              </button>
-            ))}
+            <div className="flex md:flex-col w-full justify-around md:justify-start gap-1 md:gap-2">
+              {[
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'ホーム' },
+                { id: 'timer', icon: 'timer', label: 'タイマー' },
+                { id: 'calendar', icon: 'calendar', label: 'カレンダー' },
+                { id: 'materials', icon: 'library', label: '教材管理' },
+                { id: 'settings', icon: 'settings', label: '設定・提出' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-4 rounded-2xl transition-all ${
+                    activeTab === tab.id 
+                      ? 'bg-indigo-50 text-indigo-700 font-bold shadow-sm' 
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
+                  }`}
+                >
+                  <Icon name={tab.icon} size={22} className={activeTab === tab.id ? 'text-indigo-600' : ''} />
+                  <span className="text-[10px] md:text-sm">{tab.label}</span>
+                </button>
+              ))}
+            </div>
           </nav>
 
-          {/* メインコンテンツ */}
-          <main className="flex-1 p-4 md:p-8 max-w-5xl mx-auto w-full">
-            {activeTab === 'dashboard' && <Dashboard materials={materials} records={records} />}
-            {activeTab === 'timer' && <Timer materials={materials} addRecord={addRecord} />}
-            {activeTab === 'materials' && <MaterialsManager materials={materials} setMaterials={setMaterials} />}
-            {activeTab === 'records' && <RecordsList records={records} materials={materials} setRecords={setRecords} />}
+          {/* メインエリア */}
+          <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 md:p-8 relative">
+            <div className="max-w-5xl mx-auto pb-20 md:pb-0">
+              {renderContent()}
+            </div>
           </main>
         </div>
       );
     }
 
-    // --- ダッシュボードコンポーネント ---
-    function Dashboard({ materials, records }) {
-      const today = new Date().toISOString().split('T')[0];
+    // --- 1. ダッシュボード ---
+    function Dashboard({ records, materials, goal, setTab }) {
+      const today = getLocalDateString(new Date());
       
       const stats = useMemo(() => {
-        let todaySeconds = 0;
-        let totalSeconds = 0;
-        const subjectSeconds = {};
+        let todaySec = 0, weekSec = 0, totalSec = 0;
+        const subjectSec = {};
+        
+        // 今週の月曜日を取得
+        const now = new Date();
+        const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1; // 月曜始まり
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - dayOfWeek);
+        const mondayStr = getLocalDateString(monday);
 
-        records.forEach(record => {
-          totalSeconds += record.durationSeconds;
-          
-          const recordDate = record.date.split('T')[0];
-          if (recordDate === today) {
-            todaySeconds += record.durationSeconds;
-          }
+        records.forEach(r => {
+          totalSec += r.durationSeconds;
+          const rDate = getLocalDateString(r.date);
+          if (rDate === today) todaySec += r.durationSeconds;
+          if (rDate >= mondayStr) weekSec += r.durationSeconds;
 
-          const material = materials.find(m => m.id === record.materialId);
-          const subject = material ? material.subject : 'その他';
-          subjectSeconds[subject] = (subjectSeconds[subject] || 0) + record.durationSeconds;
+          const mat = materials.find(m => m.id === r.materialId);
+          const sub = mat ? mat.subject : 'その他';
+          subjectSec[sub] = (subjectSec[sub] || 0) + r.durationSeconds;
         });
-
-        return { todaySeconds, totalSeconds, subjectSeconds };
+        return { todaySec, weekSec, totalSec, subjectSec };
       }, [records, materials, today]);
 
-      const formatHours = (seconds) => (seconds / 3600).toFixed(1);
+      const formatH = (s) => (s / 3600).toFixed(1);
+      const weekProgress = Math.min((stats.weekSec / 3600) / goal * 100, 100);
 
       return (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <h2 className="text-2xl font-bold text-slate-800">ダッシュボード</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-              <div className="bg-indigo-100 p-4 rounded-full text-indigo-600">
-                <Icon name="sun" size={32} />
+        <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-bold text-slate-800">ダッシュボード</h2>
+            <button onClick={() => setTab('timer')} className="bg-indigo-600 text-white px-4 py-2 rounded-full font-bold shadow-md hover:bg-indigo-700 flex items-center gap-2">
+              <Icon name="play" size={16} /> タイマー起動
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><Icon name="sun" size={20} /></div>
+                <p className="text-sm font-bold text-slate-500">今日</p>
               </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">今日の学習時間</p>
-                <p className="text-3xl font-bold text-slate-800">{formatHours(stats.todaySeconds)} <span className="text-base font-normal text-slate-500">時間</span></p>
-              </div>
+              <p className="text-3xl font-black text-slate-800">{formatH(stats.todaySec)}<span className="text-sm font-normal text-slate-400 ml-1">時間</span></p>
             </div>
-            
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-              <div className="bg-emerald-100 p-4 rounded-full text-emerald-600">
-                <Icon name="award" size={32} />
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-blue-100 p-2 rounded-xl text-blue-600"><Icon name="calendar-days" size={20} /></div>
+                <p className="text-sm font-bold text-slate-500">今週</p>
               </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">累計学習時間</p>
-                <p className="text-3xl font-bold text-slate-800">{formatHours(stats.totalSeconds)} <span className="text-base font-normal text-slate-500">時間</span></p>
+              <p className="text-3xl font-black text-slate-800">{formatH(stats.weekSec)}<span className="text-sm font-normal text-slate-400 ml-1">時間</span></p>
+            </div>
+            <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 col-span-2 md:col-span-1">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600"><Icon name="award" size={20} /></div>
+                <p className="text-sm font-bold text-slate-500">累計</p>
               </div>
+              <p className="text-3xl font-black text-slate-800">{formatH(stats.totalSec)}<span className="text-sm font-normal text-slate-400 ml-1">時間</span></p>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">教科別の学習比率</h3>
-            {Object.keys(stats.subjectSeconds).length === 0 ? (
-              <p className="text-slate-400 text-center py-8">まだ学習記録がありません。タイマーで記録をつけましょう！</p>
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex justify-between items-end mb-4">
+              <h3 className="font-bold text-slate-800">今週の目標達成率</h3>
+              <span className="text-sm text-slate-500">{formatH(stats.weekSec)} / {goal} 時間</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out" style={{ width: `${weekProgress}%` }}></div>
+            </div>
+            {weekProgress >= 100 && <p className="text-emerald-600 text-sm font-bold mt-2 text-center animate-pulse">🎉 今週の目標を達成しました！素晴らしい！</p>}
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-6">教科別バランス</h3>
+            {Object.keys(stats.subjectSec).length === 0 ? (
+              <p className="text-slate-400 text-center py-4 text-sm">記録がありません</p>
             ) : (
               <div className="space-y-4">
-                {Object.entries(stats.subjectSeconds)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([subject, seconds]) => {
-                    const percentage = (seconds / stats.totalSeconds) * 100;
-                    return (
-                      <div key={subject}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="font-medium text-slate-700">{subject}</span>
-                          <span className="text-slate-500">{formatHours(seconds)}時間 ({percentage.toFixed(0)}%)</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2.5">
-                          <div 
-                            className="h-2.5 rounded-full" 
-                            style={{ 
-                              width: `${percentage}%`,
-                              backgroundColor: SUBJECT_COLORS[subject] || SUBJECT_COLORS['その他']
-                            }}
-                          ></div>
-                        </div>
+                {Object.entries(stats.subjectSec).sort(([,a],[,b])=>b-a).map(([sub, sec]) => {
+                  const pct = (sec / stats.totalSec) * 100;
+                  return (
+                    <div key={sub}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-bold text-slate-700 flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full" style={{backgroundColor: SUBJECT_COLORS[sub] || '#ccc'}}></span>{sub}
+                        </span>
+                        <span className="text-slate-500 font-medium">{formatH(sec)} h ({pct.toFixed(0)}%)</span>
                       </div>
-                    );
+                      <div className="w-full bg-slate-100 rounded-full h-2"><div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: SUBJECT_COLORS[sub] || '#ccc'}}></div></div>
+                    </div>
+                  );
                 })}
               </div>
             )}
@@ -221,7 +231,7 @@
       );
     }
 
-    // --- タイマーコンポーネント ---
+    // --- 2. タイマー ---
     function Timer({ materials, addRecord }) {
       const [time, setTime] = useState(0);
       const [isRunning, setIsRunning] = useState(false);
@@ -229,89 +239,57 @@
       const intervalRef = useRef(null);
 
       useEffect(() => {
-        if (isRunning) {
-          intervalRef.current = setInterval(() => {
-            setTime(t => t + 1);
-          }, 1000);
-        } else {
-          clearInterval(intervalRef.current);
-        }
+        if (isRunning) { intervalRef.current = setInterval(() => setTime(t => t + 1), 1000); } 
+        else { clearInterval(intervalRef.current); }
         return () => clearInterval(intervalRef.current);
       }, [isRunning]);
 
-      const handleStartPause = () => {
-        if (!selectedMaterialId) {
-          alert("先に教材を選択してください。");
-          return;
-        }
+      const toggleTimer = () => {
+        if (!selectedMaterialId) return alert("学習する教材を選択してください");
         setIsRunning(!isRunning);
       };
 
-      const handleStop = () => {
+      const stopTimer = () => {
         setIsRunning(false);
-        if (time > 60) { // 1分以上なら記録
+        if (time > 60) {
           addRecord(selectedMaterialId, time);
-          alert("学習記録を保存しました！お疲れ様です。");
+          alert("記録を保存しました！");
         } else if (time > 0) {
-          alert("1分未満のため記録されませんでした。");
+          alert("1分未満のため記録されませんでした");
         }
         setTime(0);
       };
 
-      const formatTime = (totalSeconds) => {
-        const h = Math.floor(totalSeconds / 3600);
-        const m = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
+      const formatTime = (sec) => {
+        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
       };
 
       return (
-        <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-300">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl font-bold text-slate-800">学習タイマー</h2>
-            <p className="text-slate-500">集中して学習に取り組みましょう</p>
-          </div>
+        <div className="max-w-md mx-auto mt-8 animate-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-100 text-center relative overflow-hidden">
+            <div className={`absolute inset-0 bg-indigo-500 opacity-5 transition-opacity ${isRunning ? 'animate-pulse' : 'hidden'}`}></div>
+            
+            <h2 className="text-xl font-bold text-slate-800 mb-8 relative z-10">学習タイマー</h2>
+            
+            <select 
+              value={selectedMaterialId} onChange={(e) => setSelectedMaterialId(e.target.value)} disabled={isRunning}
+              className="w-full p-4 mb-8 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 focus:border-indigo-400 focus:ring-0 outline-none transition-all disabled:opacity-50 relative z-10"
+            >
+              <option value="">📚 教材を選択...</option>
+              {materials.map(m => <option key={m.id} value={m.id}>[{m.subject}] {m.name}</option>)}
+            </select>
 
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 text-center">
-            {materials.length === 0 ? (
-              <div className="py-8 text-amber-600 bg-amber-50 rounded-xl">
-                <p>まずは「教材管理」タブから学習する教材を登録してください。</p>
-              </div>
-            ) : (
-              <select 
-                value={selectedMaterialId} 
-                onChange={(e) => setSelectedMaterialId(e.target.value)}
-                disabled={isRunning}
-                className="w-full p-3 mb-8 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all disabled:opacity-50"
-              >
-                <option value="">教材を選択してください...</option>
-                {materials.map(m => (
-                  <option key={m.id} value={m.id}>【{m.subject}】{m.name}</option>
-                ))}
-              </select>
-            )}
-
-            <div className="text-6xl md:text-8xl font-black text-slate-800 tracking-wider font-mono my-8">
+            <div className="text-6xl md:text-7xl font-black text-slate-800 tracking-wider font-mono my-12 relative z-10">
               {formatTime(time)}
             </div>
 
-            <div className="flex justify-center gap-4">
-              <button 
-                onClick={handleStartPause}
-                disabled={materials.length === 0}
-                className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center text-white shadow-lg transition-transform hover:scale-105 active:scale-95 ${
-                  isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'
-                } disabled:opacity-50 disabled:hover:scale-100`}
-              >
-                <Icon name={isRunning ? "pause" : "play"} size={32} />
+            <div className="flex justify-center gap-6 relative z-10">
+              <button onClick={toggleTimer} className={`w-20 h-20 rounded-full flex items-center justify-center text-white shadow-lg transition-transform hover:scale-105 active:scale-95 ${isRunning ? 'bg-amber-500' : 'bg-indigo-600'}`}>
+                <Icon name={isRunning ? "pause" : "play"} size={36} className={isRunning ? "" : "ml-2"} />
               </button>
-              
-              <button 
-                onClick={handleStop}
-                disabled={time === 0}
-                className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center bg-rose-500 text-white shadow-lg hover:bg-rose-600 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
-              >
-                <Icon name="square" size={24} />
+              <button onClick={stopTimer} disabled={time === 0} className="w-20 h-20 rounded-full flex items-center justify-center bg-slate-800 text-white shadow-lg hover:bg-slate-900 transition-transform hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100">
+                <Icon name="square" size={28} />
               </button>
             </div>
           </div>
@@ -319,7 +297,93 @@
       );
     }
 
-    // --- 教材管理コンポーネント ---
+    // --- 3. カレンダー ---
+    function Calendar({ records, materials, events, setEvents }) {
+      const [currentDate, setCurrentDate] = useState(new Date());
+      const [newEventTitle, setNewEventTitle] = useState('');
+      const [newEventDate, setNewEventDate] = useState(getLocalDateString(new Date()));
+
+      const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+      const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+      const addEvent = (e) => {
+        e.preventDefault();
+        if(!newEventTitle) return;
+        setEvents([...events, { id: Date.now().toString(), title: newEventTitle, date: newEventDate }]);
+        setNewEventTitle('');
+      };
+
+      const deleteEvent = (id) => {
+        if(confirm('予定を削除しますか？')) setEvents(events.filter(ev => ev.id !== id));
+      };
+
+      const renderCalendarGrid = () => {
+        const days = [];
+        for (let i = 0; i < firstDayOfMonth; i++) days.push(<div key={`empty-${i}`} className="p-2 border border-slate-100 bg-slate-50/50"></div>);
+        
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = getLocalDateString(new Date(currentDate.getFullYear(), currentDate.getMonth(), d));
+          const dayRecords = records.filter(r => getLocalDateString(r.date) === dateStr);
+          const dayEvents = events.filter(ev => ev.date === dateStr);
+          
+          let dayTotalSec = 0;
+          dayRecords.forEach(r => dayTotalSec += r.durationSeconds);
+          
+          const isToday = dateStr === getLocalDateString(new Date());
+
+          days.push(
+            <div key={d} className={`p-1 md:p-2 border border-slate-100 min-h-[80px] md:min-h-[100px] flex flex-col bg-white ${isToday ? 'ring-2 ring-indigo-400 ring-inset' : ''}`}>
+              <span className={`text-xs md:text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-600'}`}>{d}</span>
+              <div className="flex-1 overflow-y-auto mt-1 space-y-1">
+                {dayEvents.map(ev => (
+                  <div key={ev.id} className="text-[10px] md:text-xs bg-red-100 text-red-700 px-1 py-0.5 rounded truncate font-bold" title={ev.title} onClick={()=>deleteEvent(ev.id)}>
+                    📌 {ev.title}
+                  </div>
+                ))}
+                {dayTotalSec > 0 && (
+                  <div className="text-[10px] md:text-xs bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-bold text-center mt-auto">
+                    {(dayTotalSec / 3600).toFixed(1)}h
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+        return days;
+      };
+
+      return (
+        <div className="space-y-6 animate-in fade-in">
+          <h2 className="text-2xl font-bold text-slate-800">カレンダー・予定</h2>
+          
+          <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-6">
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><Icon name="chevron-left" /></button>
+              <h3 className="text-lg md:text-xl font-black text-slate-800">{currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月</h3>
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><Icon name="chevron-right" /></button>
+            </div>
+            
+            <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 mb-2">
+              <div className="text-red-500">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div className="text-blue-500">土</div>
+            </div>
+            <div className="grid grid-cols-7 bg-slate-200 gap-px border border-slate-200 rounded-xl overflow-hidden">
+              {renderCalendarGrid()}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-4">予定の追加</h3>
+            <form onSubmit={addEvent} className="flex gap-2">
+              <input type="date" value={newEventDate} onChange={e=>setNewEventDate(e.target.value)} className="p-3 bg-slate-50 border rounded-xl" required />
+              <input type="text" value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} placeholder="模試、テストなど" className="flex-1 p-3 bg-slate-50 border rounded-xl" required />
+              <button type="submit" className="bg-indigo-600 text-white px-6 rounded-xl font-bold hover:bg-indigo-700">追加</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 4. 教材管理 ---
     function MaterialsManager({ materials, setMaterials }) {
       const [newMaterial, setNewMaterial] = useState('');
       const [newSubject, setNewSubject] = useState(SUBJECTS[0]);
@@ -327,147 +391,100 @@
       const handleAdd = (e) => {
         e.preventDefault();
         if (!newMaterial.trim()) return;
-        
-        const material = {
-          id: Date.now().toString(),
-          name: newMaterial.trim(),
-          subject: newSubject
-        };
-        setMaterials([...materials, material]);
+        setMaterials([...materials, { id: Date.now().toString(), name: newMaterial.trim(), subject: newSubject }]);
         setNewMaterial('');
       };
 
       const handleDelete = (id) => {
-        if(confirm('この教材を削除しますか？\n（学習履歴は残りますが、教材名が不明になります）')) {
-          setMaterials(materials.filter(m => m.id !== id));
-        }
+        if(confirm('この教材を削除しますか？')) setMaterials(materials.filter(m => m.id !== id));
       };
 
       return (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <h2 className="text-2xl font-bold text-slate-800">教材の登録・管理</h2>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">新しい教材を追加</h3>
+        <div className="space-y-6 animate-in fade-in">
+          <h2 className="text-2xl font-bold text-slate-800">教材の管理</h2>
+          
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-4">新しい教材を登録</h3>
             <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-3">
-              <select 
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                className="p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              >
+              <select value={newSubject} onChange={e=>setNewSubject(e.target.value)} className="p-3 bg-slate-50 border rounded-xl font-bold outline-none">
                 {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <input 
-                type="text" 
-                placeholder="教材名（例：青チャート、英単語ターゲット...）"
-                value={newMaterial}
-                onChange={(e) => setNewMaterial(e.target.value)}
-                className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-              <button 
-                type="submit"
-                className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition-colors whitespace-nowrap"
-              >
-                追加する
-              </button>
+              <input type="text" placeholder="教材名" value={newMaterial} onChange={e=>setNewMaterial(e.target.value)} className="flex-1 p-3 bg-slate-50 border rounded-xl outline-none" required />
+              <button type="submit" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700">追加</button>
             </form>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">登録済みの教材リスト</h3>
-            {materials.length === 0 ? (
-              <p className="text-slate-400 text-center py-4">まだ教材が登録されていません。</p>
-            ) : (
-              <ul className="space-y-3">
-                {materials.map(material => (
-                  <li key={material.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-4">登録済みリスト</h3>
+            {materials.length === 0 ? <p className="text-slate-400">教材がありません。</p> : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {materials.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-3">
-                      <span 
-                        className="px-3 py-1 rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: SUBJECT_COLORS[material.subject] || SUBJECT_COLORS['その他'] }}
-                      >
-                        {material.subject}
-                      </span>
-                      <span className="font-medium text-slate-700">{material.name}</span>
+                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: SUBJECT_COLORS[m.subject] || '#ccc'}}></span>
+                      <span className="font-bold text-slate-700">{m.name}</span>
                     </div>
-                    <button 
-                      onClick={() => handleDelete(material.id)}
-                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                    >
-                      <Icon name="trash-2" size={20} />
-                    </button>
-                  </li>
+                    <button onClick={()=>handleDelete(m.id)} className="text-slate-400 hover:text-red-500"><Icon name="trash-2" size={18} /></button>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </div>
       );
     }
 
-    // --- 学習履歴コンポーネント ---
-    function RecordsList({ records, materials, setRecords }) {
-      const formatDuration = (seconds) => {
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        if (h > 0) return `${h}時間 ${m}分`;
-        return `${m}分`;
+    // --- 5. 設定・提出（リセット機能付き） ---
+    function Settings({ records, setRecords, materials, setMaterials, events, setEvents, goal, setGoal }) {
+      const [isCopied, setIsCopied] = useState(false);
+
+      const handleCopyReport = () => {
+        const total = (records.reduce((acc, r) => acc + r.durationSeconds, 0) / 3600).toFixed(1);
+        const report = `【学習レポート】\n累計学習時間: ${total}時間\n目標設定: 週${goal}時間\n登録教材数: ${materials.length}冊\n\n#StudyTracker で記録中！`;
+        
+        const ta = document.createElement("textarea");
+        ta.value = report; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); setIsCopied(true); setTimeout(()=>setIsCopied(false), 2000); } 
+        catch (err) { alert('コピー失敗'); } finally { document.body.removeChild(ta); }
       };
 
-      const handleDelete = (id) => {
-        if(confirm('この学習記録を削除しますか？')) {
-          setRecords(records.filter(r => r.id !== id));
+      const handleResetAll = () => {
+        if(confirm('⚠️ 本当にすべてのデータを削除しますか？\n（学習記録、教材、予定がすべて消えます。この操作は取り消せません）')) {
+          setRecords([]);
+          setMaterials([]);
+          setEvents([]);
+          alert('すべてのデータをリセットしました。');
         }
       };
 
       return (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          <h2 className="text-2xl font-bold text-slate-800">学習履歴</h2>
-          
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            {records.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">学習記録がありません。</p>
-            ) : (
-              <div className="space-y-4">
-                {records.map(record => {
-                  const material = materials.find(m => m.id === record.materialId);
-                  const subjectName = material ? material.subject : '削除された教材';
-                  const materialName = material ? material.name : '不明';
-                  const dateObj = new Date(record.date);
-                  
-                  return (
-                    <div key={record.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 gap-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm text-slate-500">
-                          {dateObj.toLocaleDateString('ja-JP')} {dateObj.toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span 
-                            className="px-2 py-0.5 rounded text-xs font-bold text-white"
-                            style={{ backgroundColor: SUBJECT_COLORS[subjectName] || SUBJECT_COLORS['その他'] }}
-                          >
-                            {subjectName}
-                          </span>
-                          <span className="font-semibold text-slate-700">{materialName}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between md:justify-end gap-4">
-                        <span className="text-lg font-bold text-indigo-600">
-                          {formatDuration(record.durationSeconds)}
-                        </span>
-                        <button 
-                          onClick={() => handleDelete(record.id)}
-                          className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                        >
-                          <Icon name="trash-2" size={20} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <div className="space-y-6 animate-in fade-in">
+          <h2 className="text-2xl font-bold text-slate-800">設定と提出</h2>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="target" size={20} className="text-indigo-500" /> 目標設定</h3>
+            <div className="flex items-center gap-4">
+              <span className="font-medium text-slate-600">1週間の目標学習時間:</span>
+              <input type="number" value={goal} onChange={e=>setGoal(Number(e.target.value))} className="w-24 p-2 bg-slate-50 border rounded-xl text-center font-bold" min="1" max="100" />
+              <span className="font-medium text-slate-600">時間</span>
+            </div>
+          </div>
+
+          <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
+            <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Icon name="send" size={20} className="text-indigo-600" /> レポート提出（コピー）</h3>
+            <p className="text-sm text-indigo-700 mb-4">現在の学習サマリーをテキストとしてクリップボードにコピーします。先生への提出やSNSでの共有に利用できます。</p>
+            <button onClick={handleCopyReport} className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center transition-all shadow-sm ${isCopied ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+              <Icon name={isCopied ? "check" : "copy"} className="mr-2" size={20} />
+              {isCopied ? 'コピー完了！' : 'レポートテキストをコピー'}
+            </button>
+          </div>
+
+          <div className="bg-red-50 p-6 rounded-3xl border border-red-100 mt-12">
+            <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2"><Icon name="alert-triangle" size={20} className="text-red-600" /> 危険な操作（データリセット）</h3>
+            <p className="text-sm text-red-700 mb-4">学習記録・登録済みの教材・カレンダーの予定など、すべてのデータを消去して初期状態に戻します。</p>
+            <button onClick={handleResetAll} className="w-full py-4 rounded-2xl font-bold flex items-center justify-center bg-white border border-red-200 text-red-600 hover:bg-red-100 transition-colors">
+              <Icon name="trash-2" className="mr-2" size={20} /> 全データをリセットする
+            </button>
           </div>
         </div>
       );
