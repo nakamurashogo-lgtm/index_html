@@ -809,7 +809,7 @@
         return { start, end };
       };
 
-      // ② Google Formを開く処理 (指定のURLで開く)
+ // ② Google Formを開く処理 (指定のURLで開く)
       const handleOpenForm = (targetWeek) => {
         const isProfileIncomplete = !userProfile.grade || !userProfile.classNum || !userProfile.studentNum || !userProfile.name;
         if (isProfileIncomplete) {
@@ -826,6 +826,9 @@
         const subjectSec = {}; 
         SUBJECTS.forEach(s => subjectSec[s] = 0);
         
+        // ★★★ ここを追加します（「その他」を0で初期化） ★★★
+        subjectSec['その他'] = 0; 
+        
         records.forEach(r => {
           const rDate = getLocalDateString(r.date);
           if (rDate >= startStr && rDate <= endStr) {
@@ -837,7 +840,7 @@
           }
         });
 
-       // フォーム用のURL組み立て（ここはベースURLのみにします）
+        // フォーム用のURL組み立て
         let url = `https://docs.google.com/forms/d/e/1FAIpQLScLTYwuG2p0nXrrSkfoTH08moCs4tgwrQJKwym4F2ylohHDug/viewform?usp=pp_url`;
 
         // ③ プロフィールのパラメータ追加
