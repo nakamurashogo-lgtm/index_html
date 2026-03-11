@@ -826,7 +826,7 @@
         const subjectSec = {}; 
         SUBJECTS.forEach(s => subjectSec[s] = 0);
         
-        // ★★★ ここを追加します（「その他」を0で初期化） ★★★
+        // ★前回のバグ修正：「その他」が空っぽにならないよう0をセット
         subjectSec['その他'] = 0; 
         
         records.forEach(r => {
@@ -840,7 +840,14 @@
           }
         });
 
-        // フォーム用のURL組み立て
+        // ★秒数を「〇時間〇分」に変換する関数
+        const formatTimeStr = (sec) => {
+          const h = Math.floor(sec / 3600);
+          const m = Math.floor((sec % 3600) / 60);
+          return `${h}時間${m}分`;
+        };
+
+        // フォーム用のURL組み立て（ベースURL）
         let url = `https://docs.google.com/forms/d/e/1FAIpQLScLTYwuG2p0nXrrSkfoTH08moCs4tgwrQJKwym4F2ylohHDug/viewform?usp=pp_url`;
 
         // ③ プロフィールのパラメータ追加
@@ -849,14 +856,14 @@
         if (userProfile.studentNum) url += `&entry.381405597=${encodeURIComponent(userProfile.studentNum)}`;
         if (userProfile.name) url += `&entry.322289790=${encodeURIComponent(userProfile.name)}`;
 
-        // 学習時間のパラメータ追加 (単位を「分」で渡す)
-        url += `&entry.1196976546=${Math.round(totalSec / 60)}`;
-        url += `&entry.1599272747=${Math.round(subjectSec['英語'] / 60)}`;
-        url += `&entry.491252079=${Math.round(subjectSec['国語'] / 60)}`;
-        url += `&entry.301365365=${Math.round(subjectSec['数学'] / 60)}`;
-        url += `&entry.1971877324=${Math.round(subjectSec['理科'] / 60)}`;
-        url += `&entry.1130548948=${Math.round(subjectSec['社会'] / 60)}`;
-        url += `&entry.1068639816=${Math.round(subjectSec['その他'] / 60)}`;
+        // 学習時間のパラメータ追加 (単位を「〇時間〇分」で渡す)
+        url += `&entry.1196976546=${encodeURIComponent(formatTimeStr(totalSec))}`;
+        url += `&entry.1599272747=${encodeURIComponent(formatTimeStr(subjectSec['英語']))}`;
+        url += `&entry.491252079=${encodeURIComponent(formatTimeStr(subjectSec['国語']))}`;
+        url += `&entry.301365365=${encodeURIComponent(formatTimeStr(subjectSec['数学']))}`;
+        url += `&entry.1971877324=${encodeURIComponent(formatTimeStr(subjectSec['理科']))}`;
+        url += `&entry.1130548948=${encodeURIComponent(formatTimeStr(subjectSec['社会']))}`;
+        url += `&entry.1068639816=${encodeURIComponent(formatTimeStr(subjectSec['その他']))}`;
 
         window.open(url, '_blank');
       };
