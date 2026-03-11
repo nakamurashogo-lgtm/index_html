@@ -429,7 +429,7 @@
                 value={selectedMaterialId} onChange={(e) => setSelectedMaterialId(e.target.value)} disabled={isRunning}
                 className="w-full p-4 mb-8 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-700 outline-none transition-all disabled:opacity-50 relative z-10"
               >
-                <option value="">📚 教材を選択...</option>
+                <option value="">教材を選択...</option>
                 {materials.map(m => <option key={m.id} value={m.id}>[{m.subject}] {m.name}</option>)}
               </select>
 
@@ -675,7 +675,7 @@
       };
 
       const handleResetAll = () => {
-        if(confirm('⚠️ 本当にすべてのデータを削除しますか？\n（学習記録、教材、予定がすべて消えます）')) {
+        if(confirm('本当にすべてのデータを削除しますか？\n（学習記録、教材、予定がすべて消えます）')) {
           setRecords([]); setMaterials([]); setEvents([]);
           alert('リセットしました。');
         }
