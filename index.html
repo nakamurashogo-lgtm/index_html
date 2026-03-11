@@ -149,14 +149,20 @@
     // --- グラフコンポーネント ---
     function StudyChart({ records, materials }) {
       const [view, setView] = useState('daily');
-      const scrollRef = useRef(null);
+      const [offset, setOffset] = useState(0); // 0が最新、増えると過去
+
+      // 表示切り替え時にオフセットをリセット
+      useEffect(() => {
+        setOffset(0);
+      }, [view]);
 
       const chartData = useMemo(() => {
         if (view === 'daily') {
           const days = [];
-          for(let i=29; i>=0; i--) {
+          const DISPLAY_DAYS = 7;
+          for(let i = DISPLAY_DAYS - 1; i >= 0; i--) {
             const d = new Date();
-            d.setDate(d.getDate() - i);
+            d.setDate(d.getDate() - (offset * DISPLAY_DAYS + i));
             days.push(d);
           }
           return days.map(d => {
@@ -169,16 +175,24 @@
               if (subjects[sub] !== undefined) subjects[sub] += r.durationSeconds;
               total += r.durationSeconds;
             });
-            return { label: `${d.getMonth()+1}/${d.getDate()}`, total, subjects };
+            const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+            return { label: `${d.getMonth()+1}/${d.getDate()}(${dayOfWeek})`, total, subjects };
           });
         } else {
           const weeks = []; 
-          for(let i=11; i>=0; i--) {
+          const DISPLAY_WEEKS = 5;
+          for(let i = DISPLAY_WEEKS - 1; i >= 0; i--) {
             const now = new Date();
             const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1;
-            const endOfWeek = new Date(now); endOfWeek.setDate(now.getDate() - dayOfWeek + 6 - (i * 7));
-            const startOfWeek = new Date(endOfWeek); startOfWeek.setDate(endOfWeek.getDate() - 6);
-            const startStr = getLocalDateString(startOfWeek); const endStr = getLocalDateString(endOfWeek);
+            const targetWeekIndex = offset * DISPLAY_WEEKS + i;
+
+            const endOfWeek = new Date(now); 
+            endOfWeek.setDate(now.getDate() - dayOfWeek + 6 - (targetWeekIndex * 7));
+            const startOfWeek = new Date(endOfWeek); 
+            startOfWeek.setDate(endOfWeek.getDate() - 6);
+
+            const startStr = getLocalDateString(startOfWeek); 
+            const endStr = getLocalDateString(endOfWeek);
             const weekRecords = records.filter(r => { const rDate = getLocalDateString(r.date); return rDate >= startStr && rDate <= endStr; });
             let total = 0; const subjects = {}; SUBJECTS.forEach(s => subjects[s] = 0);
             weekRecords.forEach(r => {
@@ -189,25 +203,15 @@
             });
             
             let label = '';
-            if (i === 0) label = '今週';
-            else if (i === 1) label = '先週';
+            if (targetWeekIndex === 0) label = '今週';
+            else if (targetWeekIndex === 1) label = '先週';
             else label = `${startOfWeek.getMonth()+1}/${startOfWeek.getDate()}~`;
 
             weeks.push({ label, total, subjects });
           }
-          return weeks.reverse();
+          return weeks;
         }
-      }, [records, materials, view]);
-
-      useEffect(() => {
-        if (scrollRef.current) {
-          setTimeout(() => {
-            if (scrollRef.current) {
-              scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-            }
-          }, 10);
-        }
-      }, [view, chartData.length]);
+      }, [records, materials, view, offset]);
 
       const maxTotalSec = Math.max(...chartData.map(d => d.total), 3600);
       const maxHours = Math.max(Math.ceil(maxTotalSec / 3600), 3);
@@ -220,59 +224,75 @@
       }
       const adjustedMaxVal = topHour * 3600;
 
+      const handlePrev = () => setOffset(o => o + 1);
+      const handleNext = () => setOffset(o => Math.max(0, o - 1));
+
       return (
         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-slate-100 animate-in fade-in mt-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-slate-800">学習時間の推移 <span className="text-xs text-slate-400 font-normal ml-2 hidden md:inline">※横にスクロールして過去を見れます</span></h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-slate-800">学習時間の推移</h3>
             <div className="flex bg-slate-100 rounded-lg p-1">
               <button onClick={()=>setView('daily')} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${view==='daily'?'bg-white shadow-sm text-indigo-600':'text-slate-500'}`}>日別</button>
               <button onClick={()=>setView('weekly')} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${view==='weekly'?'bg-white shadow-sm text-indigo-600':'text-slate-500'}`}>週別</button>
             </div>
           </div>
+
+          <div className="flex justify-between items-center mb-6 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+            <button onClick={handlePrev} className="p-2 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1 text-slate-600 text-sm font-bold">
+              <Icon name="chevron-left" size={18} /> <span className="hidden sm:inline">先週</span>
+            </button>
+            <span className="text-sm font-bold text-slate-600 tracking-wide">
+              {view === 'daily' 
+                ? `${chartData[0].label.split('(')[0]} 〜 ${chartData[chartData.length-1].label.split('(')[0]}`
+                : `${offset === 0 ? '直近5週間' : `${chartData[0].label} 〜 ${chartData[chartData.length-1].label}`}`
+              }
+            </span>
+            <button onClick={handleNext} disabled={offset === 0} className={`p-2 rounded-lg transition-colors flex items-center gap-1 text-sm font-bold ${offset === 0 ? 'text-slate-300' : 'text-slate-600 hover:bg-slate-200'}`}>
+              <span className="hidden sm:inline">翌週</span> <Icon name="chevron-right" size={18} />
+            </button>
+          </div>
           
-          <div className="flex h-80">
-            <div className="w-8 md:w-10 flex flex-col justify-between text-[10px] text-slate-400 font-bold pb-8 pt-16 border-r border-slate-200">
+          <div className="flex h-72 sm:h-80">
+            <div className="w-8 md:w-10 flex flex-col justify-between text-[10px] text-slate-400 font-bold pb-8 pt-12 border-r border-slate-200">
               {yAxisLabels.map(h => (
                 <div key={h} className="text-right pr-2 transform translate-y-1.5">{h}h</div>
               ))}
             </div>
             
             <div className="flex-1 relative">
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-16">
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8 pt-12">
                 {yAxisLabels.map((h, i) => (
                   <div key={h} className={`border-t w-full ${i === yAxisLabels.length - 1 ? 'border-transparent' : 'border-slate-100 border-dashed'}`}></div>
                 ))}
               </div>
 
-              <div ref={scrollRef} className="overflow-x-auto h-full w-full flex items-end pb-8 pt-16 relative z-10" style={{ scrollBehavior: 'smooth' }}>
-                <div className="flex h-full min-w-max px-2 items-end">
-                  {chartData.map((d, i) => {
-                    const heightPercent = adjustedMaxVal > 0 ? (d.total / adjustedMaxVal) * 100 : 0;
-                    return (
-                      <div key={i} className="flex flex-col items-center justify-end h-full w-10 mx-1.5 md:w-12 md:mx-2 group relative">
-                        <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-xs p-2.5 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                          <p className="font-bold text-center border-b border-slate-600 pb-1.5 mb-1.5">{d.label} : {(d.total/3600).toFixed(1)}h</p>
-                          {SUBJECTS.map(sub => d.subjects[sub] > 0 && (
-                            <div key={sub} className="flex items-center gap-1.5 mb-1 last:mb-0">
-                              <span className="w-2 h-2 rounded-full" style={{backgroundColor: SUBJECT_COLORS[sub]}}></span>
-                              <span className="font-medium text-[10px]">{sub}: {(d.subjects[sub]/3600).toFixed(1)}h</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="w-full flex flex-col-reverse rounded-t-md overflow-hidden min-h-[4px] shadow-sm cursor-pointer hover:brightness-110 transition-all duration-700 ease-out bg-slate-50" style={{ height: `${heightPercent}%` }}>
-                          {SUBJECTS.map(sub => {
-                            const h = d.total > 0 ? (d.subjects[sub] / d.total) * 100 : 0;
-                            if (h === 0) return null;
-                            return <div key={sub} style={{ height: `${h}%`, backgroundColor: SUBJECT_COLORS[sub] }} className="w-full transition-all border-b border-black/5 last:border-0"></div>
-                          })}
-                        </div>
-
-                        <span className="absolute -bottom-6 text-[9px] md:text-[10px] text-slate-500 font-bold whitespace-nowrap">{d.label}</span>
+              <div className="h-full w-full flex items-end pb-8 pt-12 relative z-10 justify-around px-2 sm:px-6">
+                {chartData.map((d, i) => {
+                  const heightPercent = adjustedMaxVal > 0 ? (d.total / adjustedMaxVal) * 100 : 0;
+                  return (
+                    <div key={i} className="flex flex-col items-center justify-end h-full w-10 sm:w-12 group relative">
+                      <div className="absolute bottom-full mb-2 bg-slate-800 text-white text-xs p-2.5 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                        <p className="font-bold text-center border-b border-slate-600 pb-1.5 mb-1.5">{d.label} : {(d.total/3600).toFixed(1)}h</p>
+                        {SUBJECTS.map(sub => d.subjects[sub] > 0 && (
+                          <div key={sub} className="flex items-center gap-1.5 mb-1 last:mb-0">
+                            <span className="w-2 h-2 rounded-full" style={{backgroundColor: SUBJECT_COLORS[sub]}}></span>
+                            <span className="font-medium text-[10px]">{sub}: {(d.subjects[sub]/3600).toFixed(1)}h</span>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
+
+                      <div className="w-full flex flex-col-reverse rounded-t-md overflow-hidden min-h-[4px] shadow-sm cursor-pointer hover:brightness-110 transition-all duration-700 ease-out bg-slate-50" style={{ height: `${heightPercent}%` }}>
+                        {SUBJECTS.map(sub => {
+                          const h = d.total > 0 ? (d.subjects[sub] / d.total) * 100 : 0;
+                          if (h === 0) return null;
+                          return <div key={sub} style={{ height: `${h}%`, backgroundColor: SUBJECT_COLORS[sub] }} className="w-full transition-all border-b border-black/5 last:border-0"></div>
+                        })}
+                      </div>
+
+                      <span className="absolute -bottom-6 text-[9px] sm:text-[10px] text-slate-500 font-bold whitespace-nowrap">{d.label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
