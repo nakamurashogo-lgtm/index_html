@@ -59,7 +59,7 @@
       { id: 'black', color: '#0f172a', label: '黒' },
     ];
     
-    const STORAGE_PREFIX = 'study_tracker_v3_';
+    const STORAGE_PREFIX = 'study_tracker_v4_';
     
     const getLocalDateString = (date) => {
       const d = new Date(date);
@@ -82,10 +82,25 @@
       const [events, setEvents] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'events')) || []);
       const [weeklyGoalHours, setWeeklyGoalHours] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'goal')) || 20);
 
+      // プロフィール用のState追加
+      const defaultUserProfile = { grade: '', classNum: '', studentNum: '', name: '' };
+      const [userProfile, setUserProfile] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'userProfile')) || defaultUserProfile);
+
+      // フォーム設定用のState追加
+      const defaultFormSettings = { 
+        baseUrl: '', 
+        entryIdTotal: '', 
+        entryIdsSubjects: { '英語': '', '数学': '', '理科': '', '社会': '', '国語': '', 'その他': '' },
+        entryIdsProfile: { grade: '', classNum: '', studentNum: '', name: '' }
+      };
+      const [formSettings, setFormSettings] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'formSettings')) || defaultFormSettings);
+
       useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'materials', JSON.stringify(materials)); }, [materials]);
       useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'records', JSON.stringify(records)); }, [records]);
       useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'events', JSON.stringify(events)); }, [events]);
       useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'goal', JSON.stringify(weeklyGoalHours)); }, [weeklyGoalHours]);
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'userProfile', JSON.stringify(userProfile)); }, [userProfile]);
+      useEffect(() => { localStorage.setItem(STORAGE_PREFIX + 'formSettings', JSON.stringify(formSettings)); }, [formSettings]);
 
       const addRecord = (materialId, durationSeconds, customDateStr = null) => {
         let recordDate = new Date();
@@ -96,12 +111,12 @@
 
       const renderContent = () => {
         switch (activeTab) {
-          case 'dashboard': return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} />;
+          case 'dashboard': return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} userProfile={userProfile} />;
           case 'record': return <Record materials={materials} addRecord={addRecord} />;
           case 'calendar': return <Calendar records={records} materials={materials} events={events} setEvents={setEvents} />;
           case 'materials': return <MaterialsManager materials={materials} setMaterials={setMaterials} />;
-          case 'settings': return <Settings records={records} setRecords={setRecords} materials={materials} setMaterials={setMaterials} events={events} setEvents={setEvents} goal={weeklyGoalHours} setGoal={setWeeklyGoalHours} />;
-          default: return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} />;
+          case 'settings': return <Settings records={records} setRecords={setRecords} materials={materials} setMaterials={setMaterials} events={events} setEvents={setEvents} goal={weeklyGoalHours} setGoal={setWeeklyGoalHours} formSettings={formSettings} setFormSettings={setFormSettings} userProfile={userProfile} setUserProfile={setUserProfile} />;
+          default: return <Dashboard records={records} materials={materials} goal={weeklyGoalHours} setTab={setActiveTab} userProfile={userProfile} />;
         }
       };
 
@@ -149,12 +164,9 @@
     // --- グラフコンポーネント ---
     function StudyChart({ records, materials }) {
       const [view, setView] = useState('daily');
-      const [offset, setOffset] = useState(0); // 0が最新、増えると過去
+      const [offset, setOffset] = useState(0);
 
-      // 表示切り替え時にオフセットをリセット
-      useEffect(() => {
-        setOffset(0);
-      }, [view]);
+      useEffect(() => { setOffset(0); }, [view]);
 
       const chartData = useMemo(() => {
         if (view === 'daily') {
@@ -219,9 +231,7 @@
       const topHour = Math.ceil(maxHours / step) * step;
       
       const yAxisLabels = [];
-      for (let i = topHour; i >= 0; i -= step) {
-        yAxisLabels.push(i);
-      }
+      for (let i = topHour; i >= 0; i -= step) { yAxisLabels.push(i); }
       const adjustedMaxVal = topHour * 3600;
 
       const handlePrev = () => setOffset(o => o + 1);
@@ -310,7 +320,7 @@
     }
 
     // --- 1. ダッシュボード ---
-    function Dashboard({ records, materials, goal, setTab }) {
+    function Dashboard({ records, materials, goal, setTab, userProfile }) {
       const today = getLocalDateString(new Date());
       const stats = useMemo(() => {
         let todaySec = 0, weekSec = 0, totalSec = 0;
@@ -334,7 +344,10 @@
       return (
         <div className="space-y-6 animate-in fade-in duration-500">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-2xl font-bold text-slate-800">ダッシュボード</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800">ダッシュボード</h2>
+              {userProfile.name && <p className="text-sm text-slate-500 font-bold mt-1">ようこそ、{userProfile.name} さん</p>}
+            </div>
             <button onClick={() => setTab('record')} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-bold shadow-md hover:bg-indigo-700 flex items-center gap-2 text-sm transition-transform active:scale-95">
               <Icon name="plus-circle" size={18} /> 記録をつける
             </button>
@@ -500,68 +513,35 @@
     // --- 3. カレンダー ---
     function Calendar({ records, materials, events, setEvents }) {
       const [currentDate, setCurrentDate] = useState(new Date());
-      
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [newEventTitle, setNewEventTitle] = useState('');
       const [newEventDesc, setNewEventDesc] = useState('');
       const [newEventDate, setNewEventDate] = useState(getLocalDateString(new Date()));
       const [newEventColor, setNewEventColor] = useState(EVENT_COLORS[0].color);
-
       const [selectedEvent, setSelectedEvent] = useState(null);
-
       const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
       const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-
       const timerRef = useRef(null);
 
       const openEventModal = (dateStr) => {
-        setNewEventDate(dateStr || getLocalDateString(new Date()));
-        setNewEventTitle('');
-        setNewEventDesc('');
-        setNewEventColor(EVENT_COLORS[0].color);
-        setIsModalOpen(true);
+        setNewEventDate(dateStr || getLocalDateString(new Date())); setNewEventTitle(''); setNewEventDesc(''); setNewEventColor(EVENT_COLORS[0].color); setIsModalOpen(true);
       };
       const closeEventModal = () => setIsModalOpen(false);
 
       const addEvent = (e) => {
         e.preventDefault();
         if(!newEventTitle) return;
-        setEvents([...events, { 
-          id: Date.now().toString(), 
-          title: newEventTitle, 
-          description: newEventDesc,
-          date: newEventDate, 
-          color: newEventColor 
-        }]);
+        setEvents([...events, { id: Date.now().toString(), title: newEventTitle, description: newEventDesc, date: newEventDate, color: newEventColor }]);
         closeEventModal();
       };
-
-      const deleteEvent = (id) => { 
-        if(confirm('この予定を削除しますか？')) {
-          setEvents(events.filter(ev => ev.id !== id)); 
-          setSelectedEvent(null);
-        }
-      };
-
-      const handleEventClick = (ev, e) => {
-        e.stopPropagation(); 
-        setSelectedEvent(ev);
-      };
+      const deleteEvent = (id) => { if(confirm('この予定を削除しますか？')) { setEvents(events.filter(ev => ev.id !== id)); setSelectedEvent(null); } };
+      const handleEventClick = (ev, e) => { e.stopPropagation(); setSelectedEvent(ev); };
 
       const handlePointerDown = (e, dateStr) => {
         if (e.type === 'mousedown' && e.button !== 0) return;
-        timerRef.current = setTimeout(() => {
-          openEventModal(dateStr);
-          timerRef.current = null;
-        }, 500);
+        timerRef.current = setTimeout(() => { openEventModal(dateStr); timerRef.current = null; }, 500);
       };
-
-      const handlePointerUp = () => {
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
-      };
+      const handlePointerUp = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } };
 
       const renderCalendarGrid = () => {
         const days = [];
@@ -576,33 +556,15 @@
 
           days.push(
             <div 
-              key={d} 
-              className={`no-callout p-1.5 md:p-2.5 border border-slate-100 min-h-[110px] md:min-h-[140px] flex flex-col bg-white relative transition-colors hover:bg-slate-50 cursor-pointer ${isToday ? 'ring-2 ring-indigo-400 ring-inset bg-indigo-50/20' : ''}`}
-              onMouseDown={(e) => handlePointerDown(e, dateStr)}
-              onMouseUp={handlePointerUp}
-              onMouseLeave={handlePointerUp}
-              onTouchStart={(e) => handlePointerDown(e, dateStr)}
-              onTouchEnd={handlePointerUp}
-              onTouchMove={handlePointerUp}
+              key={d} className={`no-callout p-1.5 md:p-2.5 border border-slate-100 min-h-[110px] md:min-h-[140px] flex flex-col bg-white relative transition-colors hover:bg-slate-50 cursor-pointer ${isToday ? 'ring-2 ring-indigo-400 ring-inset bg-indigo-50/20' : ''}`}
+              onMouseDown={(e) => handlePointerDown(e, dateStr)} onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp} onTouchStart={(e) => handlePointerDown(e, dateStr)} onTouchEnd={handlePointerUp} onTouchMove={handlePointerUp}
             >
               <span className={`text-xs md:text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1.5 ${isToday ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>{d}</span>
               <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 pointer-events-auto">
                 {dayEvents.map(ev => (
-                  <div 
-                    key={ev.id} 
-                    className="text-[11px] md:text-xs text-white px-2 py-1.5 rounded-md truncate font-bold cursor-pointer hover:opacity-80 shadow-sm leading-tight transition-transform active:scale-95" 
-                    style={{backgroundColor: ev.color, color: ev.color === '#eab308' || ev.color === '#84cc16' ? '#1e293b' : 'white'}} 
-                    onClick={(e) => handleEventClick(ev, e)}
-                    title={ev.title}
-                  >
-                    {ev.title}
-                  </div>
+                  <div key={ev.id} className="text-[11px] md:text-xs text-white px-2 py-1.5 rounded-md truncate font-bold cursor-pointer hover:opacity-80 shadow-sm leading-tight transition-transform active:scale-95" style={{backgroundColor: ev.color, color: ev.color === '#eab308' || ev.color === '#84cc16' ? '#1e293b' : 'white'}} onClick={(e) => handleEventClick(ev, e)} title={ev.title}>{ev.title}</div>
                 ))}
-                {dayTotalSec > 0 && (
-                  <div className="text-[11px] md:text-xs bg-slate-100 text-slate-600 px-1.5 py-1 rounded-md font-bold text-center mt-auto border border-slate-200">
-                    {(dayTotalSec / 3600).toFixed(1)}h
-                  </div>
-                )}
+                {dayTotalSec > 0 && <div className="text-[11px] md:text-xs bg-slate-100 text-slate-600 px-1.5 py-1 rounded-md font-bold text-center mt-auto border border-slate-200">{(dayTotalSec / 3600).toFixed(1)}h</div>}
               </div>
             </div>
           );
@@ -643,7 +605,6 @@
             </div>
           </div>
 
-          {/* 予定追加モーダル */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200" onMouseDown={closeEventModal}>
               <div className="bg-white rounded-[2rem] p-6 md:p-8 w-full max-w-md shadow-2xl transform transition-all max-h-[90vh] overflow-y-auto" onMouseDown={e => e.stopPropagation()}>
@@ -661,40 +622,24 @@
                     <label className="block text-sm font-bold text-slate-600 mb-2">日付</label>
                     <input type="date" value={newEventDate} onChange={e=>setNewEventDate(e.target.value)} className="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-400 transition-colors" required />
                   </div>
-                  
                   <div>
                     <label className="block text-sm font-bold text-slate-600 mb-2">タイトル</label>
                     <input type="text" placeholder="例: 英語テスト" value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-400 transition-colors" required autoFocus />
                   </div>
-
                   <div>
                     <label className="block text-sm font-bold text-slate-600 mb-2">内容・メモ (任意)</label>
-                    <textarea 
-                      placeholder="範囲や持ち物など" 
-                      value={newEventDesc} 
-                      onChange={e=>setNewEventDesc(e.target.value)} 
-                      className="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-xl font-medium outline-none focus:border-indigo-400 transition-colors min-h-[80px]" 
-                    />
+                    <textarea placeholder="範囲や持ち物など" value={newEventDesc} onChange={e=>setNewEventDesc(e.target.value)} className="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-xl font-medium outline-none focus:border-indigo-400 transition-colors min-h-[80px]" />
                   </div>
-
                   <div>
                     <label className="block text-sm font-bold text-slate-600 mb-3">カラーを選択</label>
                     <div className="flex flex-wrap gap-3">
                       {EVENT_COLORS.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setNewEventColor(c.color)}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${newEventColor === c.color ? 'scale-110 ring-4 ring-offset-2 ring-indigo-200 shadow-md' : 'hover:scale-110 shadow-sm opacity-90'}`}
-                          style={{ backgroundColor: c.color }}
-                          title={c.label}
-                        >
+                        <button key={c.id} type="button" onClick={() => setNewEventColor(c.color)} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${newEventColor === c.color ? 'scale-110 ring-4 ring-offset-2 ring-indigo-200 shadow-md' : 'hover:scale-110 shadow-sm opacity-90'}`} style={{ backgroundColor: c.color }} title={c.label}>
                           {newEventColor === c.color && <Icon name="check" size={20} className={c.color === '#eab308' || c.color === '#84cc16' ? 'text-slate-800' : 'text-white'} />}
                         </button>
                       ))}
                     </div>
                   </div>
-
                   <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-indigo-700 active:scale-95 transition-all mt-4 flex items-center justify-center gap-2">
                     <Icon name="plus" size={20} /> カレンダーに追加
                   </button>
@@ -703,7 +648,6 @@
             </div>
           )}
 
-          {/* 予定の詳細・削除用モーダル */}
           {selectedEvent && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200" onMouseDown={() => setSelectedEvent(null)}>
               <div className="bg-white rounded-[2rem] p-6 md:p-8 w-full max-w-sm shadow-2xl relative" onMouseDown={e => e.stopPropagation()}>
@@ -712,9 +656,7 @@
                     <div className="w-5 h-5 rounded-full shadow-inner flex-shrink-0" style={{backgroundColor: selectedEvent.color}}></div>
                     <h3 className="text-xl font-bold text-slate-800 leading-tight">{selectedEvent.title}</h3>
                   </div>
-                  <button onClick={() => setSelectedEvent(null)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors flex-shrink-0">
-                    <Icon name="x" size={20} />
-                  </button>
+                  <button onClick={() => setSelectedEvent(null)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full transition-colors flex-shrink-0"><Icon name="x" size={20} /></button>
                 </div>
                 
                 <div className="mb-8 space-y-5 bg-slate-50 p-5 rounded-2xl border border-slate-100">
@@ -722,7 +664,6 @@
                     <p className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1.5"><Icon name="calendar" size={14}/> 日付</p>
                     <p className="text-slate-800 font-bold">{selectedEvent.date.replace(/-/g, '/')}</p>
                   </div>
-                  
                   {selectedEvent.description && (
                     <div>
                       <p className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1.5"><Icon name="align-left" size={14}/> 内容</p>
@@ -730,7 +671,6 @@
                     </div>
                   )}
                 </div>
-
                 <div className="flex justify-end pt-2">
                   <button onClick={() => deleteEvent(selectedEvent.id)} className="flex items-center justify-center gap-2 w-full text-red-600 bg-red-50 hover:bg-red-100 py-3.5 rounded-xl font-bold transition-colors">
                     <Icon name="trash-2" size={18} /> この予定を削除する
@@ -739,7 +679,6 @@
               </div>
             </div>
           )}
-
         </div>
       );
     }
@@ -783,8 +722,9 @@
     }
 
     // --- 5. 設定・提出 ---
-    function Settings({ records, setRecords, materials, setMaterials, events, setEvents, goal, setGoal }) {
-      const [copiedType, setCopiedType] = useState(null);
+    function Settings({ records, setRecords, materials, setMaterials, events, setEvents, goal, setGoal, formSettings, setFormSettings, userProfile, setUserProfile }) {
+      const [isSettingOpen, setIsSettingOpen] = useState(false);
+      const [parseUrlText, setParseUrlText] = useState('');
 
       const getWeekRange = (offsetWeeks = 0) => {
         const now = new Date();
@@ -794,12 +734,26 @@
         return { start, end };
       };
 
-      const handleCopyReport = (targetWeek) => {
+      // Google Formを開く処理
+      const handleOpenForm = (targetWeek) => {
+        if (!formSettings.baseUrl) {
+          alert('連携先のGoogleフォームが設定されていません。教員に確認するか、設定を行ってください。');
+          return;
+        }
+
+        // プロフィールの入力確認
+        const isProfileIncomplete = !userProfile.grade || !userProfile.classNum || !userProfile.studentNum || !userProfile.name;
+        if (isProfileIncomplete) {
+          if (!confirm('学年・組・出席番号・氏名に未入力の項目があります。\nこのまま提出画面へ進みますか？')) {
+            return;
+          }
+        }
+
         const offset = targetWeek === 'current' ? 0 : -1;
         const { start, end } = getWeekRange(offset);
         const startStr = getLocalDateString(start); const endStr = getLocalDateString(end);
+        
         let totalSec = 0; const subjectSec = {}; SUBJECTS.forEach(s => subjectSec[s] = 0);
-
         records.forEach(r => {
           const rDate = getLocalDateString(r.date);
           if (rDate >= startStr && rDate <= endStr) {
@@ -811,20 +765,70 @@
           }
         });
 
-        const formatDate = (d) => `${d.getMonth()+1}/${d.getDate()}`;
-        const weekLabel = targetWeek === 'current' ? '今週' : '先週';
-        
-        let report = `【週間学習レポート (${weekLabel})】\n期間: ${formatDate(start)}(月) 〜 ${formatDate(end)}(日)\n\n合計学習時間: ${(totalSec / 3600).toFixed(1)}時間\n\n教科別学習時間:\n`;
-        let hasSubject = false;
-        SUBJECTS.forEach(sub => {
-          if (subjectSec[sub] > 0) { report += `- ${sub}: ${(subjectSec[sub] / 3600).toFixed(1)}時間\n`; hasSubject = true; }
-        });
-        if (!hasSubject) report += "  (学習記録なし)\n";
-        report += `\n#StudyLog`;
+        // URLの組み立て
+        let url = `${formSettings.baseUrl}?usp=pp_url`;
 
-        const ta = document.createElement("textarea"); ta.value = report; document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); setCopiedType(targetWeek); setTimeout(() => setCopiedType(null), 2500); } 
-        catch (err) { alert('コピーに失敗しました'); } finally { document.body.removeChild(ta); }
+        // 学習時間のパラメータ追加
+        if (formSettings.entryIdTotal && totalSec > 0) {
+          url += `&${formSettings.entryIdTotal}=${(totalSec / 3600).toFixed(1)}`;
+        }
+        SUBJECTS.forEach(sub => {
+          const entryId = formSettings.entryIdsSubjects[sub];
+          // 時間が0でも入力欄を空にしないために 0.0 を送る
+          if (entryId) {
+            url += `&${entryId}=${(subjectSec[sub] / 3600).toFixed(1)}`;
+          }
+        });
+
+        // プロフィールのパラメータ追加
+        if (formSettings.entryIdsProfile.grade && userProfile.grade) {
+          url += `&${formSettings.entryIdsProfile.grade}=${encodeURIComponent(userProfile.grade)}`;
+        }
+        if (formSettings.entryIdsProfile.classNum && userProfile.classNum) {
+          url += `&${formSettings.entryIdsProfile.classNum}=${encodeURIComponent(userProfile.classNum)}`;
+        }
+        if (formSettings.entryIdsProfile.studentNum && userProfile.studentNum) {
+          url += `&${formSettings.entryIdsProfile.studentNum}=${encodeURIComponent(userProfile.studentNum)}`;
+        }
+        if (formSettings.entryIdsProfile.name && userProfile.name) {
+          url += `&${formSettings.entryIdsProfile.name}=${encodeURIComponent(userProfile.name)}`;
+        }
+
+        window.open(url, '_blank');
+      };
+
+      // 自動解析処理
+      const handleParseUrl = () => {
+        if(!parseUrlText) return;
+        try {
+          const urlObj = new URL(parseUrlText);
+          const params = new URLSearchParams(urlObj.search);
+          const newSettings = { ...formSettings, baseUrl: parseUrlText.split('?')[0] };
+          
+          for (const [key, value] of params.entries()) {
+            if (key.startsWith('entry.')) {
+              // 学習時間
+              if (value === 'total') newSettings.entryIdTotal = key;
+              else if (value === 'english') newSettings.entryIdsSubjects['英語'] = key;
+              else if (value === 'math') newSettings.entryIdsSubjects['数学'] = key;
+              else if (value === 'science') newSettings.entryIdsSubjects['理科'] = key;
+              else if (value === 'social') newSettings.entryIdsSubjects['社会'] = key;
+              else if (value === 'japanese') newSettings.entryIdsSubjects['国語'] = key;
+              else if (value === 'other') newSettings.entryIdsSubjects['その他'] = key;
+              // プロフィール
+              else if (value === 'grade') newSettings.entryIdsProfile.grade = key;
+              else if (value === 'classnum') newSettings.entryIdsProfile.classNum = key;
+              else if (value === 'studentnum') newSettings.entryIdsProfile.studentNum = key;
+              else if (value === 'name') newSettings.entryIdsProfile.name = key;
+            }
+          }
+          setFormSettings(newSettings);
+          setParseUrlText('');
+          alert('フォーム設定を自動解析して適用しました！');
+          setIsSettingOpen(false); // 閉じる
+        } catch(e) {
+          alert('URLの形式が正しくありません。');
+        }
       };
 
       const handleResetAll = () => {
@@ -837,6 +841,40 @@
       return (
         <div className="space-y-6 animate-in fade-in">
           <h2 className="text-2xl font-bold text-slate-800">設定と提出</h2>
+          
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Icon name="user" size={20} className="text-indigo-500" /> プロフィール設定</h3>
+            <p className="text-sm text-slate-500 mb-4 font-medium">ここで入力した情報は提出時に自動で入力されます。進級時などにいつでも変更できます。</p>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">学年</label>
+                <div className="relative">
+                  <input type="number" min="1" max="6" value={userProfile.grade} onChange={e=>setUserProfile({...userProfile, grade: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400" placeholder="例: 1" />
+                  <span className="absolute right-3 top-3 text-slate-400 font-bold">年</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">組</label>
+                <div className="relative">
+                  <input type="number" min="1" value={userProfile.classNum} onChange={e=>setUserProfile({...userProfile, classNum: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400" placeholder="例: 3" />
+                  <span className="absolute right-3 top-3 text-slate-400 font-bold">組</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">出席番号</label>
+                <div className="relative">
+                  <input type="number" min="1" value={userProfile.studentNum} onChange={e=>setUserProfile({...userProfile, studentNum: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400" placeholder="例: 15" />
+                  <span className="absolute right-3 top-3 text-slate-400 font-bold">番</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-1">氏名</label>
+                <input type="text" value={userProfile.name} onChange={e=>setUserProfile({...userProfile, name: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-400" placeholder="山田 太郎" />
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="target" size={20} className="text-indigo-500" /> 目標設定</h3>
             <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 w-max">
@@ -845,18 +883,93 @@
               <span className="font-bold text-slate-600">時間</span>
             </div>
           </div>
+
           <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-3xl border border-indigo-100 shadow-sm">
-            <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Icon name="send" size={20} className="text-indigo-600" /> 週間レポート提出（コピー）</h3>
-            <p className="text-sm text-indigo-700 mb-6 font-medium">月曜日〜日曜日の1週間の「合計学習時間」と「各教科別の学習時間」をコピーします。<br/>※ 日曜日の24時（月曜日の0時）が締め切りとなります。</p>
+            <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Icon name="send" size={20} className="text-indigo-600" /> 週間レポート提出（Googleフォーム）</h3>
+            <p className="text-sm text-indigo-700 mb-6 font-medium">ボタンを押すと、あなたの「プロフィール」と1週間の「学習時間」が自動入力された状態でGoogleフォームが開きます。<br/>※ 送信ボタンを押して提出を完了させてください。</p>
             <div className="flex flex-col md:flex-row gap-4">
-              <button onClick={() => handleCopyReport('prev')} className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center transition-all shadow-md active:scale-95 ${copiedType === 'prev' ? 'bg-emerald-500 text-white' : 'bg-white text-indigo-600 border-2 border-indigo-200 hover:bg-indigo-50'}`}>
-                <Icon name={copiedType === 'prev' ? "check-circle" : "copy"} className="mr-2" size={20} />{copiedType === 'prev' ? 'コピー完了！' : '先週の記録をコピー'}
+              <button onClick={() => handleOpenForm('prev')} className="flex-1 py-4 rounded-2xl font-bold flex items-center justify-center transition-all shadow-md active:scale-95 bg-white text-indigo-600 border-2 border-indigo-200 hover:bg-indigo-50">
+                <Icon name="external-link" className="mr-2" size={20} /> 先週の記録を提出する
               </button>
-              <button onClick={() => handleCopyReport('current')} className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center transition-all shadow-md active:scale-95 ${copiedType === 'current' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                <Icon name={copiedType === 'current' ? "check-circle" : "copy"} className="mr-2" size={20} />{copiedType === 'current' ? 'コピー完了！' : '今週の記録をコピー'}
+              <button onClick={() => handleOpenForm('current')} className="flex-1 py-4 rounded-2xl font-bold flex items-center justify-center transition-all shadow-md active:scale-95 bg-indigo-600 text-white hover:bg-indigo-700">
+                <Icon name="external-link" className="mr-2" size={20} /> 今週の記録を提出する
               </button>
             </div>
+            {!formSettings.baseUrl && <p className="text-red-500 text-xs font-bold mt-3 text-center">※現在提出先フォームが設定されていません</p>}
           </div>
+
+          {/* 教員向け設定エリア */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mt-8">
+            <button onClick={() => setIsSettingOpen(!isSettingOpen)} className="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+              <span className="font-bold text-slate-600 flex items-center gap-2"><Icon name="wrench" size={18} /> 【教員向け】提出先フォーム設定</span>
+              <Icon name={isSettingOpen ? "chevron-up" : "chevron-down"} size={20} className="text-slate-400" />
+            </button>
+            
+            {isSettingOpen && (
+              <div className="p-6 border-t border-slate-200">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-6">
+                  <h4 className="font-bold text-amber-800 mb-2 text-sm">💡 簡単自動設定の手順</h4>
+                  <ol className="text-xs text-amber-700 space-y-1.5 list-decimal pl-4">
+                    <li>Google Formsで提出用フォームを作成します。（学年、組、出席番号、氏名、各教科の学習時間などは<strong>すべて「記述式（短い回答）」</strong>で作成してください）</li>
+                    <li>フォーム右上の「︙」から<strong>「事前入力したURLを取得」</strong>をクリックします。</li>
+                    <li>各回答欄に、以下の<strong>キーワード</strong>を半角英数で入力して画面下の「リンクを取得」を押します。<br/>
+                      【学年】= <code className="bg-white px-1 rounded font-bold text-amber-900">grade</code>, 【組】= <code className="bg-white px-1 rounded font-bold text-amber-900">classnum</code>, 【出席番号】= <code className="bg-white px-1 rounded font-bold text-amber-900">studentnum</code>, 【氏名】= <code className="bg-white px-1 rounded font-bold text-amber-900">name</code><br/>
+                      【合計時間】= <code className="bg-white px-1 rounded">total</code>, 【英語】= <code className="bg-white px-1 rounded">english</code>, 【数学】= <code className="bg-white px-1 rounded">math</code>, 【理科】= <code className="bg-white px-1 rounded">science</code>, 【社会】= <code className="bg-white px-1 rounded">social</code>, 【国語】= <code className="bg-white px-1 rounded">japanese</code>, 【その他】= <code className="bg-white px-1 rounded">other</code>
+                    </li>
+                    <li>コピーした長いリンクを下の枠に貼り付けて、「解析して設定」ボタンを押してください。</li>
+                  </ol>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 mb-8">
+                  <input type="text" placeholder="ここに取得したURLを貼り付け..." value={parseUrlText} onChange={e=>setParseUrlText(e.target.value)} className="flex-1 p-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-mono outline-none focus:border-indigo-400" />
+                  <button onClick={handleParseUrl} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold whitespace-nowrap hover:bg-slate-900 transition-colors">解析して設定</button>
+                </div>
+
+                <div className="space-y-4 pt-6 border-t border-slate-100">
+                  <p className="text-sm font-bold text-slate-500 mb-4">設定内容の確認・手動調整</p>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">フォーム基本URL (viewformまで)</label>
+                    <input type="text" value={formSettings.baseUrl} onChange={e=>setFormSettings({...formSettings, baseUrl: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                    <div className="col-span-2 sm:col-span-4 border-b border-slate-100 pb-2"><span className="text-xs font-bold text-slate-600">▼ プロフィール項目</span></div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-500 mb-1">学年 (entry.xxxx)</label>
+                      <input type="text" value={formSettings.entryIdsProfile.grade} onChange={e=>setFormSettings({...formSettings, entryIdsProfile: {...formSettings.entryIdsProfile, grade: e.target.value}})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-500 mb-1">組 (entry.xxxx)</label>
+                      <input type="text" value={formSettings.entryIdsProfile.classNum} onChange={e=>setFormSettings({...formSettings, entryIdsProfile: {...formSettings.entryIdsProfile, classNum: e.target.value}})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-500 mb-1">番号 (entry.xxxx)</label>
+                      <input type="text" value={formSettings.entryIdsProfile.studentNum} onChange={e=>setFormSettings({...formSettings, entryIdsProfile: {...formSettings.entryIdsProfile, studentNum: e.target.value}})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-500 mb-1">氏名 (entry.xxxx)</label>
+                      <input type="text" value={formSettings.entryIdsProfile.name} onChange={e=>setFormSettings({...formSettings, entryIdsProfile: {...formSettings.entryIdsProfile, name: e.target.value}})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
+                    <div className="col-span-2 sm:col-span-3 border-b border-slate-100 pb-2 mt-2"><span className="text-xs font-bold text-slate-600">▼ 学習時間項目</span></div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-500 mb-1">合計時間 (entry.xxxx)</label>
+                      <input type="text" value={formSettings.entryIdTotal} onChange={e=>setFormSettings({...formSettings, entryIdTotal: e.target.value})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                    </div>
+                    {SUBJECTS.map(sub => (
+                      <div key={sub}>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">{sub} (entry.xxxx)</label>
+                        <input type="text" value={formSettings.entryIdsSubjects[sub]} onChange={e=>setFormSettings({...formSettings, entryIdsSubjects: {...formSettings.entryIdsSubjects, [sub]: e.target.value}})} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="bg-red-50 p-6 rounded-3xl border border-red-100 mt-12">
             <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2"><Icon name="alert-triangle" size={20} className="text-red-600" /> 危険な操作</h3>
             <button onClick={handleResetAll} className="w-full py-4 rounded-2xl font-bold flex items-center justify-center bg-white border-2 border-red-200 text-red-600 hover:bg-red-100 transition-colors">
