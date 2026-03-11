@@ -937,6 +937,10 @@
 
         let url = `https://docs.google.com/forms/d/e/1FAIpQLScLTYwuG2p0nXrrSkfoTH08moCs4tgwrQJKwym4F2ylohHDug/viewform?usp=pp_url`;
 
+        const periodStr = `${start.getMonth() + 1}月${start.getDate()}日〜${end.getMonth() + 1}月${end.getDate()}日`;
+        // ※期間送信用のエントリーID（PERIOD_ENTRY_IDの部分）は、実際のGoogleフォームに合わせて変更してください。
+        url += `&entry.855666368=${encodeURIComponent(periodStr)}`;
+
         if (userProfile.grade) url += `&entry.1119124569=${encodeURIComponent(userProfile.grade)}`;
         if (userProfile.classNum) url += `&entry.183805390=${encodeURIComponent(userProfile.classNum)}`;
         if (userProfile.studentNum) url += `&entry.381405597=${encodeURIComponent(userProfile.studentNum)}`;
