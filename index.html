@@ -29,6 +29,9 @@
     /* iOSでの長押し時の選択メニュー防止 */
     .no-callout { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
   </style>
+　　<script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </head>
 <body class="text-slate-800">
   <div id="root"></div>
@@ -986,6 +989,202 @@
       );
     }
 
+<div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">成績推移グラフ</h2>
+
+        <!-- タブ切り替え（定期考査 / 模試） -->
+        <div class="flex border-b mb-6">
+            <button id="tab-regular" class="px-6 py-2 border-b-2 border-blue-500 text-blue-600 font-bold focus:outline-none transition-colors" onclick="switchTab('regular')">
+                定期考査
+            </button>
+            <button id="tab-mock" class="px-6 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-bold focus:outline-none transition-colors" onclick="switchTab('mock')">
+                模試
+            </button>
+        </div>
+
+        <!-- グラフ表示エリア -->
+        <div class="mb-8 bg-white p-4 rounded-lg border border-gray-200">
+            <canvas id="scoreChart" height="120"></canvas>
+        </div>
+
+        <!-- データ入力フォーム -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-lg font-bold mb-4 text-gray-700" id="form-title">定期考査の得点を追加</h3>
+            <form id="scoreForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">テスト名 (例: 1学期中間、第1回模試など)</label>
+                    <input type="text" id="testName" required placeholder="テスト名を入力" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <!-- 各教科の入力欄（教科の色に合わせたデザイン） -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-red-600 mb-1">国語</label>
+                        <input type="number" id="score-japanese" min="0" max="100" placeholder="点数" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-red-500 focus:border-red-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-blue-600 mb-1">数学</label>
+                        <input type="number" id="score-math" min="0" max="100" placeholder="点数" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-yellow-600 mb-1">英語</label>
+                        <input type="number" id="score-english" min="0" max="100" placeholder="点数" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-yellow-500 focus:border-yellow-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-green-600 mb-1">理科</label>
+                        <input type="number" id="score-science" min="0" max="100" placeholder="点数" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-green-500 focus:border-green-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-purple-600 mb-1">社会</label>
+                        <input type="number" id="score-social" min="0" max="100" placeholder="点数" class="w-full border-gray-300 rounded-md shadow-sm p-2 border focus:ring-purple-500 focus:border-purple-500">
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded shadow transition duration-200">
+                        グラフに反映する
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 教科の設定（表示名とグラフの配色）
+        const subjects = [
+            { id: 'japanese', label: '国語', color: '#ef4444' }, // 赤
+            { id: 'math', label: '数学', color: '#3b82f6' },     // 青
+            { id: 'english', label: '英語', color: '#f59e0b' },  // 黄
+            { id: 'science', label: '理科', color: '#10b981' },  // 緑
+            { id: 'social', label: '社会', color: '#8b5cf6' }    // 紫
+        ];
+
+        // データを保存するオブジェクト（初期サンプルデータ入り）
+        let testData = {
+            regular: [
+                { name: '1学期中間', scores: { japanese: 65, math: 70, english: 60, science: 75, social: 80 } }
+            ],
+            mock: [
+                { name: '第1回 記述模試', scores: { japanese: 55, math: 50, english: 65, science: 60, social: 58 } }
+            ]
+        };
+
+        let currentTab = 'regular'; // 現在表示中のタブ
+        let chartInstance = null;   // Chart.jsのインスタンス
+
+        // 画面読み込み時の初期化処理
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            updateChart();
+            
+            // フォーム送信時のイベント
+            document.getElementById('scoreForm').addEventListener('submit', function(e) {
+                e.preventDefault(); // 画面リロードを防ぐ
+                addScore();
+            });
+        });
+
+        // タブの切り替え処理
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            const regBtn = document.getElementById('tab-regular');
+            const mockBtn = document.getElementById('tab-mock');
+            
+            // タブの見た目を更新
+            if (tab === 'regular') {
+                regBtn.className = "px-6 py-2 border-b-2 border-blue-500 text-blue-600 font-bold focus:outline-none transition-colors";
+                mockBtn.className = "px-6 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-bold focus:outline-none transition-colors";
+                document.getElementById('form-title').innerText = "定期考査の得点を追加";
+            } else {
+                mockBtn.className = "px-6 py-2 border-b-2 border-blue-500 text-blue-600 font-bold focus:outline-none transition-colors";
+                regBtn.className = "px-6 py-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-bold focus:outline-none transition-colors";
+                document.getElementById('form-title').innerText = "模試の得点を追加";
+            }
+            
+            // グラフを新しいタブのデータで再描画
+            updateChart();
+        }
+
+        // グラフの初期設定
+        function initChart() {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100, // 100点満点を想定
+                            title: { display: true, text: '得点' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        }
+
+        // グラフのデータ更新処理
+        function updateChart() {
+            const data = testData[currentTab];
+            const labels = data.map(d => d.name);
+            
+            // 各教科のデータセットを作成
+            const datasets = subjects.map(subject => {
+                return {
+                    label: subject.label,
+                    data: data.map(d => d.scores[subject.id] || null), // 未入力はnullとして線を繋がない
+                    borderColor: subject.color,
+                    backgroundColor: subject.color,
+                    borderWidth: 2,
+                    tension: 0.3, // 線の丸み
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                };
+            });
+
+            chartInstance.data.labels = labels;
+            chartInstance.data.datasets = datasets;
+            chartInstance.update();
+        }
+
+        // フォームから点数を追加する処理
+        function addScore() {
+            const name = document.getElementById('testName').value;
+            const scores = {};
+            
+            // 各教科の入力値を取得
+            subjects.forEach(subject => {
+                const val = document.getElementById(`score-${subject.id}`).value;
+                // 入力がある場合のみ数値を保存（未入力は除外）
+                scores[subject.id] = val !== '' ? Number(val) : null; 
+            });
+
+            // 現在のタブのデータ配列に追加
+            testData[currentTab].push({ name, scores });
+            
+            // フォームをリセット（空にする）
+            document.getElementById('scoreForm').reset();
+            
+            // グラフを再描画して反映
+            updateChart();
+        }
+    </script>
+
+    
     // --- 5. 設定・提出・データバックアップ ---
     function Settings({ records, setRecords, materials, setMaterials, events, setEvents, goal, setGoal, userProfile, setUserProfile }) {
       
