@@ -1243,7 +1243,7 @@
 
         const periodStr = `${start.getMonth() + 1}月${start.getDate()}日〜${end.getMonth() + 1}月${end.getDate()}日`;
         // ※期間送信用のエントリーID（PERIOD_ENTRY_IDの部分）は、実際のGoogleフォームに合わせて変更してください。
-        url += `&entry.PERIOD_ENTRY_ID=${encodeURIComponent(periodStr)}`;
+        url += `&entry.855666368=${encodeURIComponent(periodStr)}`;
 
         if (userProfile.grade) url += `&entry.1119124569=${encodeURIComponent(userProfile.grade)}`;
         if (userProfile.classNum) url += `&entry.183805390=${encodeURIComponent(userProfile.classNum)}`;
@@ -1254,7 +1254,7 @@
         
         // ①日別平均時間のエントリを追加。
         // ※「DAILY_AVG_ENTRY_ID」を、お使いのGoogleフォームの日別平均入力用ID（数字）に変更してください。
-        url += `&entry.DAILY_AVG_ENTRY_ID=${encodeURIComponent(formatTimeStr(dailyAvgSec))}`;
+        url += `&entry.1297023481=${encodeURIComponent(formatTimeStr(dailyAvgSec))}`;
 
         url += `&entry.1599272747=${encodeURIComponent(formatTimeStr(subjectSec['英語']))}`;
         url += `&entry.491252079=${encodeURIComponent(formatTimeStr(subjectSec['国語']))}`;
