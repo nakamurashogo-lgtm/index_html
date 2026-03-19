@@ -159,10 +159,20 @@
       const defaultUserProfile = { grade: '', classNum: '', studentNum: '', name: '' };
       const [userProfile, setUserProfile] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'userProfile')) || defaultUserProfile);
 
-      // 通知権限の要求
+      // 通知権限の要求とService Workerの登録（スマホプッシュ通知用）
       useEffect(() => {
         if ("Notification" in window && Notification.permission === "default") {
           Notification.requestPermission();
+        }
+        if ('serviceWorker' in navigator) {
+          // プッシュ通知（ローカル通知）を表示するためのService WorkerをBlobとして登録
+          const swCode = `
+            self.addEventListener('install', () => self.skipWaiting());
+            self.addEventListener('activate', () => self.clients.claim());
+          `;
+          const blob = new Blob([swCode], { type: 'application/javascript' });
+          const swUrl = URL.createObjectURL(blob);
+          navigator.serviceWorker.register(swUrl).catch(err => console.log('SW registration failed:', err));
         }
       }, []);
 
@@ -182,9 +192,21 @@
 
             let updated = false;
             const newEvents = events.map(ev => {
+              // 指定した日時に通知を発火
               if (ev.time && ev.date === currentDateStr && ev.time === currentTimeStr && !ev.notified) {
                 if ("Notification" in window && Notification.permission === "granted") {
-                  new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                  // Service Worker経由で通知を出す（スマホでプッシュ通知として表示されやすくなる）
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then(registration => {
+                      registration.showNotification("Study Log", { 
+                        body: `【リマインド】${ev.title}`, 
+                        icon: "icon.png",
+                        vibrate: [200, 100, 200]
+                      });
+                    });
+                  } else {
+                    new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                  }
                 } else {
                   alert(`【リマインド】\n${ev.title}`);
                 }
@@ -663,7 +685,7 @@
               {/* ②「平均時間」の文字を大きくする修正箇所 */}
               <p className="font-bold text-slate-500 mt-1 flex items-baseline gap-1">
                 平均: <span className="text-2xl md:text-3xl text-indigo-600 ml-1">{formatTimeStr(averageSec)}</span> 
-                <span className="text-xs ml-1">/ {view === 'daily' ? '日' : view === 'weekly' ? '週' : '月'}</span>
+                <span className="text-xs ml-1">/ {view === 'daily' ? '日' : view === 'weekly' ? '月' : '月'}</span>
               </p>
             </div>
             <div className="flex bg-slate-100 rounded-lg p-1 self-end sm:self-auto">
@@ -870,7 +892,7 @@
         if (totalSec <= 0) return alert('学習時間を入力してください');
         
         addRecord(manualMaterialId, totalSec, manualDate);
-        alert('手持で記録を追加しました！');
+        alert('手動で記録を追加しました！');
         setManualHours(''); setManualMinutes('');
       };
 
