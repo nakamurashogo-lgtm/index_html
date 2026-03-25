@@ -47,56 +47,6 @@
       });
     }
   </script>
-<button id="notify-btn">プッシュ通知をオンにする</button>
-
-<script type="module">
-  // Firebaseのモジュールを読み込み
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging.js";
-
-  // ★ここにもステップ1でメモした firebaseConfig を貼り付けます★
-  const firebaseConfig = {
-    apiKey: "AIzaSy...",
-    authDomain: "...",
-    // ...省略...
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const messaging = getMessaging(app);
-
-  // ボタンを押した時に通知の許可を求める
-  document.getElementById('notify-btn').addEventListener('click', () => {
-    Notification.requestPermission().then((permission) => {
-      if (permission === 'granted') {
-        console.log('通知が許可されました。');
-        
-        // ★ステップ1の最後でメモした「VAPIDキー」をここに貼り付けます★
-        getToken(messaging, { vapidKey: 'B...' }).then((currentToken) => {
-          if (currentToken) {
-            console.log('あなたのデバイストークン:', currentToken);
-            // ※本来はこのトークンをデータベースに保存しますが、今回はこのまま進めます
-          } else {
-            console.log('トークンを取得できませんでした。');
-          }
-        }).catch((err) => {
-          console.log('トークン取得エラー:', err);
-        });
-      } else {
-        console.log('通知が拒否されました。');
-      }
-    });
-  });
-
-  // アプリを開いている時（フォアグラウンド）のメッセージ受信
-  onMessage(messaging, (payload) => {
-    console.log('アプリ起動中にメッセージを受信しました: ', payload);
-    // アプリを開いている時は標準の通知が出ないため、アラート等で表示します
-    alert(`通知が来ました！\n${payload.notification.title}\n${payload.notification.body}`);
-  });
-</script>
-
-
-
 </head>
 <body class="text-slate-800">
   <div id="root"></div>
