@@ -30,23 +30,16 @@
     .no-callout { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
   </style>
 
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        const swCode = `
-          self.addEventListener('push', function(e) {
-            const options = { body: e.data.text(), icon: 'icon.png' };
-            e.waitUntil(self.registration.showNotification('Study Log リマインド', options));
-          });
-        `;
-        const blob = new Blob([swCode], {type: 'application/javascript'});
-        const swUrl = URL.createObjectURL(blob);
-        navigator.serviceWorker.register(swUrl).catch(function(err) {
-          console.log('ServiceWorker registration failed: ', err);
-        });
-      });
-    }
-  </script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "7112de81-a4df-4adf-a968-6cdf0e9d9517",
+    });
+  });
+</script>  
+
 </head>
 <body class="text-slate-800">
   <div id="root"></div>
