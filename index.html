@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -178,7 +177,7 @@
         });
       }, []);
 
-      // リマインド通知の監視処理 (OneSignalのAPIを利用)
+      // アプリを開いている間のローカルフォールバック通知処理
       const prevMinuteRef = useRef(new Date().getMinutes());
       useEffect(() => {
         const interval = setInterval(() => {
@@ -199,44 +198,20 @@
               const targetTime = ev.notificationTime || ev.time;
 
               if (targetTime && targetDate === currentDateStr && targetTime === currentTimeStr && !ev.notified) {
-                // OneSignalを使ってプッシュ通知を送信
-                window.OneSignalDeferred = window.OneSignalDeferred || [];
-                window.OneSignalDeferred.push(async function(OneSignal) {
-                  const subId = OneSignal.User.PushSubscription.id;
-                  if (subId) {
-                    try {
-                      await fetch('https://onesignal.com/api/v1/notifications', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json; charset=utf-8'
-                        },
-                        body: JSON.stringify({
-                          app_id: "7112de81-a4df-4adf-a968-6cdf0e9d9517",
-                          include_subscription_ids: [subId],
-                          headings: { en: "Study Log リマインド", ja: "Study Log リマインド" },
-                          contents: { en: ev.title, ja: ev.title }
-                        })
-                      });
-                    } catch (err) {
-                      console.error("OneSignal Notification Error:", err);
-                    }
+                // OneSignalのプッシュが届かなかった時のためのローカルフォールバック
+                if ("Notification" in window && Notification.permission === "granted") {
+                  if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                    navigator.serviceWorker.ready.then(registration => {
+                      registration.showNotification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                    }).catch(() => {
+                      new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                    });
                   } else {
-                    // プッシュ許可が得られていない場合のフォールバック
-                    if ("Notification" in window && Notification.permission === "granted") {
-                      if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-                        navigator.serviceWorker.ready.then(registration => {
-                          registration.showNotification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
-                        }).catch(() => {
-                          new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
-                        });
-                      } else {
-                        new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
-                      }
-                    } else {
-                      alert(`【リマインド】\n${ev.title}`);
-                    }
+                    new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
                   }
-                });
+                } else {
+                  alert(`【リマインド】\n${ev.title}`);
+                }
 
                 updated = true;
                 return { ...ev, notified: true };
@@ -1044,6 +1019,37 @@
       const addEvent = (e) => {
         e.preventDefault();
         if(!newEventTitle) return;
+
+        // OneSignalで予約送信（スケジュール送信）を行う
+        const targetDate = newNotificationDate || newEventDate;
+        if (targetDate && newNotificationTime) {
+          window.OneSignalDeferred = window.OneSignalDeferred || [];
+          window.OneSignalDeferred.push(async function(OneSignal) {
+            const subId = await OneSignal.User.PushSubscription.id;
+            if (subId) {
+              // JST（日本時間）として送信時刻をフォーマット
+              const sendAfterStr = `${targetDate} ${newNotificationTime}:00 GMT+0900`;
+              try {
+                await fetch('https://onesignal.com/api/v1/notifications', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                  },
+                  body: JSON.stringify({
+                    app_id: "7112de81-a4df-4adf-a968-6cdf0e9d9517",
+                    include_subscription_ids: [subId],
+                    headings: { en: "Study Log リマインド", ja: "Study Log リマインド" },
+                    contents: { en: newEventTitle, ja: newEventTitle },
+                    send_after: sendAfterStr // 指定時間に送信するパラメータを追加
+                  })
+                });
+              } catch (err) {
+                console.error("OneSignal Schedule Notification Error:", err);
+              }
+            }
+          });
+        }
+
         setEvents([...events, { 
           id: Date.now().toString(), 
           title: newEventTitle, 
