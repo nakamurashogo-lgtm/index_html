@@ -170,14 +170,15 @@
       const defaultUserProfile = { grade: '', classNum: '', studentNum: '', name: '' };
       const [userProfile, setUserProfile] = useState(() => JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'userProfile')) || defaultUserProfile);
 
-      // 通知権限の要求
+      // 通知権限の要求 (OneSignalを利用)
       useEffect(() => {
-        if ("Notification" in window && Notification.permission === "default") {
-          Notification.requestPermission();
-        }
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(async function(OneSignal) {
+          await OneSignal.Slidedown.promptPush();
+        });
       }, []);
 
-      // リマインド通知の監視処理
+      // リマインド通知の監視処理 (OneSignalのAPIを利用)
       const prevMinuteRef = useRef(new Date().getMinutes());
       useEffect(() => {
         const interval = setInterval(() => {
@@ -198,20 +199,45 @@
               const targetTime = ev.notificationTime || ev.time;
 
               if (targetTime && targetDate === currentDateStr && targetTime === currentTimeStr && !ev.notified) {
-                if ("Notification" in window && Notification.permission === "granted") {
-                  // スマホ(PWA)での通知表示のためService Workerを利用
-                  if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-                    navigator.serviceWorker.ready.then(registration => {
-                      registration.showNotification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
-                    }).catch(() => {
-                      new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
-                    });
+                // OneSignalを使ってプッシュ通知を送信
+                window.OneSignalDeferred = window.OneSignalDeferred || [];
+                window.OneSignalDeferred.push(async function(OneSignal) {
+                  const subId = OneSignal.User.PushSubscription.id;
+                  if (subId) {
+                    try {
+                      await fetch('https://onesignal.com/api/v1/notifications', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json; charset=utf-8'
+                        },
+                        body: JSON.stringify({
+                          app_id: "7112de81-a4df-4adf-a968-6cdf0e9d9517",
+                          include_subscription_ids: [subId],
+                          headings: { en: "Study Log リマインド", ja: "Study Log リマインド" },
+                          contents: { en: ev.title, ja: ev.title }
+                        })
+                      });
+                    } catch (err) {
+                      console.error("OneSignal Notification Error:", err);
+                    }
                   } else {
-                    new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                    // プッシュ許可が得られていない場合のフォールバック
+                    if ("Notification" in window && Notification.permission === "granted") {
+                      if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+                        navigator.serviceWorker.ready.then(registration => {
+                          registration.showNotification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                        }).catch(() => {
+                          new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                        });
+                      } else {
+                        new Notification("Study Log リマインド", { body: ev.title, icon: "icon.png" });
+                      }
+                    } else {
+                      alert(`【リマインド】\n${ev.title}`);
+                    }
                   }
-                } else {
-                  alert(`【リマインド】\n${ev.title}`);
-                }
+                });
+
                 updated = true;
                 return { ...ev, notified: true };
               }
@@ -1567,4 +1593,3 @@
   </script>
 </body>
 </html>
-
